@@ -1,5 +1,8 @@
 const STORAGE_KEY = "conferencia_madeiras_v1";
 const BOX_MODEL_VALUE_PREFIX = "box-model:";
+const BOX_NUMBER_VALUE_PREFIX = "box-number:";
+const LEGACY_TYPE_VALUE_PREFIX = "legacy-type:";
+const BOX_NUMBERS = Array.from({ length: 36 }, (_, index) => index + 1);
 
 const DEFAULT_STATE = {
 clientes: [
@@ -29,6 +32,7 @@ modelosBox: []
 
 let state = loadState();
 let manualTotalOverride = false;
+let legacyConferenceEdit = false;
 
 function createDefaultState() {
 return {
@@ -84,6 +88,13 @@ typeof record.cliente === "string" &&
 typeof record.tipoItem === "string" &&
 typeof record.medida === "string" &&
 (record.modeloBoxId === undefined || typeof record.modeloBoxId === "string") &&
+(record.boxNumber === undefined || (
+Number.isInteger(record.boxNumber) &&
+record.boxNumber >= 1 &&
+record.boxNumber <= 36 &&
+record.tipoItem === "Box" &&
+record.modeloBoxId === undefined
+)) &&
 typeof record.dataConferencia === "string" &&
 Number.isFinite(Number(record.qtdPacotes)) &&
 Number.isFinite(Number(record.qtdPorPacote)) &&
@@ -132,7 +143,11 @@ throw new Error("Um ou mais modelos de box são inválidos.");
 }
 const boxModelIds = new Set(boxModels.map((model) => model.id));
 if (candidate.registros.some((record) =>
-record.modeloBoxId && (!boxModelIds.has(record.modeloBoxId) || record.tipoItem !== "Box")
+record.modeloBoxId && (
+!boxModelIds.has(record.modeloBoxId) ||
+record.tipoItem !== "Box" ||
+record.boxNumber !== undefined
+)
 )) {
 throw new Error("Uma ou mais conferências fazem referência a modelos de box inválidos.");
 }
@@ -329,45 +344,39 @@ fillSelect(selectMedida, state.medidas, "Selecione a medida...", curMedida);
 
 fillSelect(filterCliente, state.clientes, "Todos os fornecedores/clientes", curFCliente);
 fillSelect(filterTipo, conferenceTypes, "Todos os itens", curFTipo);
+updateConferenceQuantityFields();
 renderInventorySelects(curMovementItem);
 }
 
 function renderConferenceTypeSelect(selectedValue = document.getElementById("select-tipo").value) {
 const select = document.getElementById("select-tipo");
-select.innerHTML = '<option value="">Selecione o item ou modelo de box...</option>';
-
-const itemTypes = state.tipos.filter((type) => type.trim().toLocaleLowerCase("pt-BR") !== "box");
-if (
-state.tipos.some((type) => type.trim().toLocaleLowerCase("pt-BR") === "box") ||
-state.registros.some((record) => record.tipoItem === "Box" && !record.modeloBoxId)
-) {
-itemTypes.push("Box");
-}
-if (itemTypes.length > 0) {
-const itemGroup = document.createElement("optgroup");
-itemGroup.label = "Madeiras e outros itens";
-itemTypes.forEach((type) => {
+select.innerHTML = '<option value="">Selecione um Box de 1 a 36...</option>';
+BOX_NUMBERS.forEach((number) => {
 const option = document.createElement("option");
-option.value = type;
-option.textContent = type;
-option.selected = type === selectedValue;
-itemGroup.appendChild(option);
-});
-select.appendChild(itemGroup);
-}
-
-if (state.modelosBox.length > 0) {
-const boxGroup = document.createElement("optgroup");
-boxGroup.label = "Modelos de box";
-state.modelosBox.forEach((model) => {
-const option = document.createElement("option");
-option.value = `${BOX_MODEL_VALUE_PREFIX}${model.id}`;
-option.textContent = model.nome;
+option.value = `${BOX_NUMBER_VALUE_PREFIX}${number}`;
+option.textContent = `Box ${number}`;
 option.selected = option.value === selectedValue;
-boxGroup.appendChild(option);
+select.appendChild(option);
 });
-select.appendChild(boxGroup);
+
+if (selectedValue.startsWith(LEGACY_TYPE_VALUE_PREFIX) || selectedValue.startsWith(BOX_MODEL_VALUE_PREFIX)) {
+const legacyGroup = document.createElement("optgroup");
+legacyGroup.label = "Registro anterior";
+const option = document.createElement("option");
+option.value = selectedValue;
+option.textContent = selectedValue.startsWith(BOX_MODEL_VALUE_PREFIX)
+? state.modelosBox.find((model) => model.id === selectedValue.slice(BOX_MODEL_VALUE_PREFIX.length))?.nome || "Box de modelo anterior"
+: selectedValue.slice(LEGACY_TYPE_VALUE_PREFIX.length);
+option.selected = true;
+legacyGroup.appendChild(option);
+select.appendChild(legacyGroup);
 }
+}
+
+function getBoxNumber(selectedValue) {
+if (!selectedValue.startsWith(BOX_NUMBER_VALUE_PREFIX)) return null;
+const number = Number(selectedValue.slice(BOX_NUMBER_VALUE_PREFIX.length));
+return BOX_NUMBERS.includes(number) ? number : null;
 }
 
 function getConferenceBoxModelId(selectedValue) {
@@ -377,9 +386,22 @@ return selectedValue.startsWith(BOX_MODEL_VALUE_PREFIX)
 }
 
 function getConferenceTypeLabel(record) {
+if (record.boxNumber) return `Box ${record.boxNumber}`;
 if (!record.modeloBoxId) return record.tipoItem;
 return state.modelosBox.find((model) => model.id === record.modeloBoxId)?.nome || record.tipoItem;
 }
+
+function updateConferenceQuantityFields() {
+const isBoxEntry = !legacyConferenceEdit || getBoxNumber(document.getElementById("select-tipo").value) !== null;
+document.getElementById("box-quantity-field").classList.toggle("hidden", !isBoxEntry);
+document.getElementById("conference-legacy-fields").classList.toggle("hidden", isBoxEntry);
+document.getElementById("input-qtd-box").required = isBoxEntry;
+document.getElementById("input-pacotes").required = !isBoxEntry;
+document.getElementById("input-unid-pacote").required = !isBoxEntry;
+document.getElementById("input-total").required = !isBoxEntry;
+}
+
+document.getElementById("select-tipo").addEventListener("change", updateConferenceQuantityFields);
 
 function renderInventorySelects(selectedItemId = document.getElementById("mov-item").value) {
 const select = document.getElementById("mov-item");
@@ -419,7 +441,6 @@ renderList("clientes", "list-clientes");
 renderList("tipos", "list-tipos");
 renderList("medidas", "list-medidas");
 renderInventoryItems();
-renderBoxModels();
 }
 
 function renderList(key, ulId) {
@@ -474,86 +495,6 @@ list.appendChild(li);
 }
 
 renderInventorySelects();
-renderBoxComponentOptions();
-}
-
-function renderBoxModels() {
-const list = document.getElementById("list-modelos-box");
-list.innerHTML = "";
-if (state.modelosBox.length === 0) {
-list.innerHTML = '<li class="list-empty">Nenhum modelo de box cadastrado.</li>';
-return;
-}
-
-state.modelosBox.forEach((model) => {
-const boxItem = getInventoryItem(model.itemId);
-const li = document.createElement("li");
-li.className = "box-model-list-item";
-const content = document.createElement("div");
-const title = document.createElement("strong");
-title.textContent = `${model.nome} (${boxItem ? boxItem.unidade : "box"})`;
-const components = document.createElement("ul");
-components.className = "box-model-components";
-model.componentes.forEach((component) => {
-const item = getInventoryItem(component.itemId);
-const componentLine = document.createElement("li");
-componentLine.textContent = `${getCategoryLabel(item ? item.categoria : "outro")} · ${getInventoryLabel(item)} — ${formatQuantity(component.quantidade)} ${item ? item.unidade : ""}`;
-components.appendChild(componentLine);
-});
-content.append(title, components);
-
-const button = document.createElement("button");
-button.type = "button";
-button.className = "btn-del-item";
-button.textContent = "Excluir";
-button.addEventListener("click", () => deleteBoxModel(model.id));
-li.append(content, button);
-list.appendChild(li);
-});
-}
-
-function renderBoxComponentOptions() {
-document.querySelectorAll(".box-component-item").forEach((select) => {
-const selectedId = select.value;
-select.innerHTML = '<option value="">Selecione um componente...</option>';
-state.itensEstoque.filter((item) => item.categoria !== "box").forEach((item) => {
-const option = document.createElement("option");
-option.value = item.id;
-option.textContent = `${getCategoryLabel(item.categoria)} · ${getInventoryLabel(item)} (${item.unidade})`;
-option.selected = item.id === selectedId;
-select.appendChild(option);
-});
-});
-}
-
-function addBoxComponentRow() {
-const row = document.createElement("div");
-row.className = "box-component-row";
-
-const select = document.createElement("select");
-select.className = "box-component-item";
-select.setAttribute("aria-label", "Componente do modelo");
-select.required = true;
-
-const quantity = document.createElement("input");
-quantity.type = "number";
-quantity.className = "box-component-quantity";
-quantity.inputMode = "decimal";
-quantity.min = "0.01";
-quantity.step = "any";
-quantity.placeholder = "Qtd.";
-quantity.setAttribute("aria-label", "Quantidade do componente");
-quantity.required = true;
-
-const remove = document.createElement("button");
-remove.type = "button";
-remove.className = "btn-del-item";
-remove.textContent = "Remover";
-remove.addEventListener("click", () => row.remove());
-
-row.append(select, quantity, remove);
-document.getElementById("box-component-list").appendChild(row);
-renderBoxComponentOptions();
 }
 
 function deleteInventoryItem(id) {
@@ -577,31 +518,6 @@ state.itensEstoque = items;
 renderInventoryItems();
 renderDashboard();
 showToast("Item de estoque excluído.");
-}
-
-function deleteBoxModel(id) {
-const model = state.modelosBox.find((entry) => entry.id === id);
-if (!model) return;
-if (state.registros.some((record) => record.modeloBoxId === id)) {
-showToast("Este modelo está vinculado a conferências e não pode ser excluído.");
-return;
-}
-if (state.movimentacoes.some((movement) => movement.itemId === model.itemId)) {
-showToast("Este modelo tem movimentações no histórico e não pode ser excluído.");
-return;
-}
-if (!window.confirm("Excluir este modelo de box e seu item do estoque?")) return;
-
-const models = state.modelosBox.filter((entry) => entry.id !== id);
-const items = state.itensEstoque.filter((item) => item.id !== model.itemId);
-if (!saveState({ ...state, modelosBox: models, itensEstoque: items })) return;
-state.modelosBox = models;
-state.itensEstoque = items;
-renderConferenceTypeSelect();
-renderInventoryItems();
-renderBoxModels();
-renderDashboard();
-showToast("Modelo de box excluído.");
 }
 
 document.getElementById("form-item-estoque").addEventListener("submit", (event) => {
@@ -631,56 +547,6 @@ event.currentTarget.reset();
 renderInventoryItems();
 renderDashboard();
 showToast("Item de estoque cadastrado.");
-});
-
-document.getElementById("btn-add-box-component").addEventListener("click", addBoxComponentRow);
-
-document.getElementById("form-modelo-box").addEventListener("submit", (event) => {
-event.preventDefault();
-const name = document.getElementById("box-nome").value.trim();
-if (state.modelosBox.some((model) => model.nome.toLocaleLowerCase() === name.toLocaleLowerCase())) {
-showToast("Já existe um modelo de box com esse nome.");
-return;
-}
-
-const rows = [...document.querySelectorAll(".box-component-row")];
-if (rows.length === 0) {
-showToast("Adicione ao menos um componente para o modelo.");
-return;
-}
-
-const componentes = rows.map((row) => ({
-itemId: row.querySelector(".box-component-item").value,
-quantidade: Number(row.querySelector(".box-component-quantity").value)
-}));
-if (componentes.some((component) => !component.itemId || !Number.isFinite(component.quantidade) || component.quantidade <= 0)) {
-showToast("Informe um item e uma quantidade válida para cada componente.");
-return;
-}
-
-const itemId = createEntryId("box");
-const boxItem = {
-id: itemId,
-nome: name,
-categoria: "box",
-unidade: document.getElementById("box-unidade").value.trim(),
-medida: ""
-};
-const model = { id: itemId, nome: name, itemId, componentes };
-const items = [...state.itensEstoque, boxItem];
-const models = [...state.modelosBox, model];
-if (!saveState({ ...state, itensEstoque: items, modelosBox: models })) return;
-state.itensEstoque = items;
-state.modelosBox = models;
-event.currentTarget.reset();
-document.getElementById("box-unidade").value = "box";
-document.getElementById("box-component-list").innerHTML = "";
-addBoxComponentRow();
-renderConferenceTypeSelect();
-renderInventoryItems();
-renderBoxModels();
-renderDashboard();
-showToast("Modelo de box cadastrado; seus componentes terão estoque independente.");
 });
 
 // Add Standard Forms
@@ -738,6 +604,7 @@ const inputPacotes = document.getElementById("input-pacotes");
 const inputUnidPacote = document.getElementById("input-unid-pacote");
 const inputTotal = document.getElementById("input-total");
 const totalModeTag = document.getElementById("total-mode-tag");
+const inputBoxQuantity = document.getElementById("input-qtd-box");
 
 function updateAutoTotal() {
 if (manualTotalOverride) return;
@@ -764,6 +631,7 @@ e.preventDefault();
 
 const editId = document.getElementById("edit-id").value;
 const selectedType = document.getElementById("select-tipo").value;
+const boxNumber = getBoxNumber(selectedType);
 const boxModelId = getConferenceBoxModelId(selectedType);
 const boxModel = boxModelId
 ? state.modelosBox.find((model) => model.id === boxModelId)
@@ -772,39 +640,55 @@ if (boxModelId && !boxModel) {
 showToast("O modelo de box selecionado não está mais cadastrado.");
 return;
 }
+const boxQuantity = Number(inputBoxQuantity.value);
+if (boxNumber !== null && (!Number.isInteger(boxQuantity) || boxQuantity < 1)) {
+showToast("Informe uma quantidade válida para o Box.");
+return;
+}
+const legacyType = selectedType.startsWith(LEGACY_TYPE_VALUE_PREFIX)
+? selectedType.slice(LEGACY_TYPE_VALUE_PREFIX.length)
+: selectedType;
 
 const record = {
-id: editId || String(Date.now()),
+id: editId || (boxNumber !== null ? createEntryId("box-record") : String(Date.now())),
 cliente: document.getElementById("select-cliente").value,
-tipoItem: boxModel ? "Box" : selectedType,
+tipoItem: boxNumber !== null || boxModel ? "Box" : legacyType,
 medida: document.getElementById("select-medida").value,
-qtdPacotes: Number(inputPacotes.value) || 0,
-qtdPorPacote: Number(inputUnidPacote.value) || 0,
-qtdTotalContada: Number(inputTotal.value) || 0,
+qtdPacotes: boxNumber !== null ? 0 : Number(inputPacotes.value) || 0,
+qtdPorPacote: boxNumber !== null ? 0 : Number(inputUnidPacote.value) || 0,
+qtdTotalContada: boxNumber !== null ? boxQuantity : Number(inputTotal.value) || 0,
 dataConferencia: document.getElementById("input-data").value,
+...(boxNumber !== null ? { boxNumber } : {}),
 ...(boxModel ? { modeloBoxId: boxModel.id } : {})
 };
 
 if (editId) {
 const idx = state.registros.findIndex((r) => r.id === editId);
 if (idx !== -1) state.registros[idx] = record;
-showToast("Conferência atualizada!");
+showToast(boxNumber !== null ? `Box ${boxNumber} atualizado!` : "Conferência atualizada!");
 } else {
 state.registros.unshift(record);
-showToast("Conferência salva com sucesso!");
+showToast(boxNumber !== null ? `Box ${boxNumber} salvo com sucesso!` : "Conferência salva com sucesso!");
 }
 
 saveState();
 resetForm();
 renderTable();
+renderBoxHistory();
 });
 
 function resetForm() {
+const selectedBoxNumber = getBoxNumber(document.getElementById("select-tipo").value);
+legacyConferenceEdit = false;
 document.getElementById("edit-id").value = "";
-document.getElementById("form-title").textContent = "Nova Conferência";
-document.getElementById("btn-submit").textContent = "Salvar Conferência";
+document.getElementById("form-title").textContent = "Registrar Box";
+document.getElementById("btn-submit").textContent = "Salvar Box";
 document.getElementById("btn-cancel-edit").classList.add("hidden");
 
+document.getElementById("select-tipo").value = "";
+renderConferenceTypeSelect(selectedBoxNumber ? `${BOX_NUMBER_VALUE_PREFIX}${selectedBoxNumber}` : "");
+updateConferenceQuantityFields();
+inputBoxQuantity.value = "";
 inputPacotes.value = "";
 inputUnidPacote.value = "";
 inputTotal.value = "";
@@ -812,6 +696,37 @@ manualTotalOverride = false;
 totalModeTag.textContent = "Auto";
 totalModeTag.className = "tag-auto";
 document.getElementById("input-data").value = getTodayISO();
+}
+
+function renderBoxHistory() {
+const tbody = document.getElementById("tbody-conferencias-box");
+const records = state.registros
+.filter((record) => record.boxNumber)
+.sort((a, b) => b.dataConferencia.localeCompare(a.dataConferencia) || b.id.localeCompare(a.id));
+
+tbody.innerHTML = records.map((record) => `
+<tr>
+<td><strong>Box ${record.boxNumber}</strong></td>
+<td>${formatDateBR(record.dataConferencia)}</td>
+<td>${escapeHTML(record.cliente)}</td>
+<td>${escapeHTML(record.medida)}</td>
+<td class="num">${formatNumber(record.qtdTotalContada)}</td>
+<td class="actions-col">
+    <div class="row-actions">
+        <button type="button" class="btn-icon edit edit-box-record" data-id="${escapeHTML(record.id)}">Editar</button>
+        <button type="button" class="btn-icon delete delete-box-record" data-id="${escapeHTML(record.id)}">Excluir</button>
+    </div>
+</td>
+</tr>
+`).join("");
+document.getElementById("empty-box-records").classList.toggle("hidden", records.length > 0);
+
+tbody.querySelectorAll(".edit-box-record").forEach((button) => {
+button.addEventListener("click", () => startEdit(button.dataset.id));
+});
+tbody.querySelectorAll(".delete-box-record").forEach((button) => {
+button.addEventListener("click", () => deleteRecord(button.dataset.id));
+});
 }
 
 document.getElementById("btn-cancel-edit").addEventListener("click", resetForm);
@@ -833,7 +748,13 @@ return true;
 function getMaterialTotals(records) {
 const totals = new Map();
 records.forEach((record) => {
-const key = JSON.stringify([record.cliente, record.tipoItem, record.modeloBoxId || "", record.medida]);
+const key = JSON.stringify([
+record.cliente,
+record.tipoItem,
+record.boxNumber || "",
+record.modeloBoxId || "",
+record.medida
+]);
 if (!totals.has(key)) {
 totals.set(key, {
 fornecedor: record.cliente,
@@ -871,8 +792,8 @@ tr.innerHTML = `
 <td><strong>${escapeHTML(r.cliente)}</strong></td>
 <td>${escapeHTML(getConferenceTypeLabel(r))}</td>
 <td>${escapeHTML(r.medida)}</td>
-<td class="num">${formatNumber(r.qtdPacotes)}</td>
-<td class="num">${formatNumber(r.qtdPorPacote)}</td>
+<td class="num">${r.boxNumber ? "—" : formatNumber(r.qtdPacotes)}</td>
+<td class="num">${r.boxNumber ? "—" : formatNumber(r.qtdPorPacote)}</td>
 <td class="num"><strong>${formatNumber(r.qtdTotalContada)}</strong></td>
 <td class="actions-col">
     <div class="row-actions">
@@ -886,7 +807,7 @@ tbody.appendChild(tr);
 
 const suppliers = new Set(filtered.map((record) => record.cliente));
 const materials = new Set(filtered.map((record) =>
-JSON.stringify([record.tipoItem, record.modeloBoxId || "", record.medida])
+JSON.stringify([record.tipoItem, record.boxNumber || "", record.modeloBoxId || "", record.medida])
 ));
 document.getElementById("kpi-registros").textContent = formatNumber(filtered.length);
 document.getElementById("kpi-fornecedores").textContent = formatNumber(suppliers.size);
@@ -927,12 +848,20 @@ function startEdit(id) {
 const r = state.registros.find((item) => item.id === id);
 if (!r) return;
 
+const isBoxEntry = Number.isInteger(r.boxNumber);
+legacyConferenceEdit = !isBoxEntry;
+const selectedType = isBoxEntry
+? `${BOX_NUMBER_VALUE_PREFIX}${r.boxNumber}`
+: r.modeloBoxId
+? `${BOX_MODEL_VALUE_PREFIX}${r.modeloBoxId}`
+: `${LEGACY_TYPE_VALUE_PREFIX}${r.tipoItem}`;
+renderConferenceTypeSelect(selectedType);
 document.getElementById("edit-id").value = r.id;
 document.getElementById("select-cliente").value = r.cliente;
-document.getElementById("select-tipo").value = r.modeloBoxId
-? `${BOX_MODEL_VALUE_PREFIX}${r.modeloBoxId}`
-: r.tipoItem;
+document.getElementById("select-tipo").value = selectedType;
+updateConferenceQuantityFields();
 document.getElementById("select-medida").value = r.medida;
+inputBoxQuantity.value = isBoxEntry ? r.qtdTotalContada : "";
 inputPacotes.value = r.qtdPacotes;
 inputUnidPacote.value = r.qtdPorPacote;
 inputTotal.value = r.qtdTotalContada;
@@ -942,8 +871,10 @@ manualTotalOverride = r.qtdTotalContada !== r.qtdPacotes * r.qtdPorPacote;
 totalModeTag.textContent = manualTotalOverride ? "Manual" : "Auto";
 totalModeTag.className = manualTotalOverride ? "tag-manual" : "tag-auto";
 
-document.getElementById("form-title").textContent = "Editando Conferência";
-document.getElementById("btn-submit").textContent = "Atualizar Conferência";
+document.getElementById("form-title").textContent = isBoxEntry
+? `Editando Box ${r.boxNumber}`
+: "Editando Conferência anterior";
+document.getElementById("btn-submit").textContent = isBoxEntry ? "Atualizar Box" : "Atualizar registro";
 document.getElementById("btn-cancel-edit").classList.remove("hidden");
 switchTab("tab-lancamento");
 }
@@ -953,6 +884,7 @@ if (!confirm("Deseja realmente excluir este lançamento?")) return;
 state.registros = state.registros.filter((r) => r.id !== id);
 saveState();
 renderTable();
+renderBoxHistory();
 showToast("Registro excluído.");
 }
 
@@ -1182,8 +1114,8 @@ formatDateBR(r.dataConferencia),
 `"${String(r.cliente).replace(/"/g, '""')}"`,
 `"${String(getConferenceTypeLabel(r)).replace(/"/g, '""')}"`,
 `"${String(r.medida).replace(/"/g, '""')}"`,
-r.qtdPacotes,
-r.qtdPorPacote,
+r.boxNumber ? "" : r.qtdPacotes,
+r.boxNumber ? "" : r.qtdPorPacote,
 r.qtdTotalContada
 ].join(";"));
 });
@@ -1218,6 +1150,7 @@ state = imported;
 renderSelects();
 renderStandardLists();
 renderTable();
+renderBoxHistory();
 document.getElementById("mov-data").value = getTodayISO();
 document.getElementById("valor-data").value = getTodayISO();
 renderDashboard();
@@ -1264,8 +1197,8 @@ document.getElementById("mov-data").value = getTodayISO();
 document.getElementById("valor-data").value = getTodayISO();
 renderSelects();
 renderStandardLists();
-addBoxComponentRow();
 renderTable();
+renderBoxHistory();
 renderDashboard();
 renderMovements();
 renderFinancialEntries();

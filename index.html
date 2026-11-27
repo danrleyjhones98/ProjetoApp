@@ -28,7 +28,7 @@
 
         <nav class="tab-bar" role="tablist" aria-label="Navegação principal">
             <button type="button" class="tab-btn active" data-tab="tab-lancamento" role="tab" aria-selected="true">
-                + Conferência
+                Boxes
             </button>
             <button type="button" class="tab-btn" data-tab="tab-dashboard" role="tab" aria-selected="false">
                 Dashboard
@@ -53,7 +53,7 @@
         <section id="tab-lancamento" class="tab-panel active">
             <div class="card">
                 <div class="card-header">
-                    <h2 id="form-title">Nova Conferência</h2>
+                    <h2 id="form-title">Registrar Box</h2>
                     <button type="button" id="btn-cancel-edit" class="btn btn-ghost btn-sm hidden">Cancelar
                         edição</button>
                 </div>
@@ -62,15 +62,10 @@
                     <input type="hidden" id="edit-id" value="" />
 
                     <div class="form-group">
-                        <label for="select-tipo">Box / Tipo de Item *</label>
-                        <div class="select-with-add">
-                            <select id="select-tipo" required>
-                                <option value="">Selecione o item ou modelo de box...</option>
-                            </select>
-                            <button type="button" class="btn-quick-add" data-target="tipos"
-                                title="Adicionar novo tipo de item">+</button>
-                        </div>
-                        <small class="hint">Os modelos de box cadastrados em Padrões aparecem nesta lista.</small>
+                        <label for="select-tipo">Número do Box *</label>
+                        <select id="select-tipo" required>
+                            <option value="">Selecione um Box de 1 a 36...</option>
+                        </select>
                     </div>
 
                     <div class="form-group">
@@ -95,51 +90,76 @@
                         </div>
                     </div>
 
-                    <div class="grid-2">
-                        <div class="form-group">
-                            <label for="input-pacotes">Qtd. de Pacotes *</label>
-                            <input type="number" id="input-pacotes" inputmode="numeric" min="0" step="1"
-                                placeholder="Ex: 12" required />
-                        </div>
-
-                        <div class="form-group">
-                            <label for="input-unid-pacote">Unid. por Pacote *</label>
-                            <input type="number" id="input-unid-pacote" inputmode="numeric" min="0" step="1"
-                                placeholder="Ex: 50" required />
-                        </div>
+                    <div class="form-group" id="box-quantity-field">
+                        <label for="input-qtd-box">Quantidade *</label>
+                        <input type="number" id="input-qtd-box" inputmode="numeric" min="1" step="1"
+                            placeholder="Ex: 10" required />
                     </div>
 
-                    <div class="grid-2">
+                    <div id="conference-legacy-fields" class="hidden">
+                        <div class="grid-2">
+                            <div class="form-group">
+                                <label for="input-pacotes">Qtd. de Pacotes *</label>
+                                <input type="number" id="input-pacotes" inputmode="numeric" min="0" step="1"
+                                    placeholder="Ex: 12" />
+                            </div>
+
+                            <div class="form-group">
+                                <label for="input-unid-pacote">Unid. por Pacote *</label>
+                                <input type="number" id="input-unid-pacote" inputmode="numeric" min="0" step="1"
+                                    placeholder="Ex: 50" />
+                            </div>
+                        </div>
+
                         <div class="form-group">
                             <div class="label-row">
                                 <label for="input-total">Qtd. Total Contada *</label>
                                 <span id="total-mode-tag" class="tag-auto">Auto</span>
                             </div>
-                            <input type="number" id="input-total" inputmode="numeric" min="0" step="1" placeholder="0"
-                                required />
+                            <input type="number" id="input-total" inputmode="numeric" min="0" step="1" placeholder="0" />
                             <small class="hint">Calculado automaticamente (Pacotes × Unid.), mas você pode alterar
                                 manualmente se houver peças avulsas.</small>
                         </div>
+                    </div>
 
-                        <div class="form-group">
-                            <label for="input-data">Data de Conferência *</label>
-                            <input type="date" id="input-data" required />
-                        </div>
+                    <div class="form-group">
+                        <label for="input-data">Data *</label>
+                        <input type="date" id="input-data" required />
                     </div>
 
                     <div class="form-actions">
                         <button type="submit" id="btn-submit" class="btn btn-primary btn-block">
-                            Salvar Conferência
+                            Salvar Box
                         </button>
                     </div>
                 </form>
+            </div>
+
+            <div class="card">
+                <h3>Histórico dos Boxes</h3>
+                <div class="table-wrapper">
+                    <table class="excel-table">
+                        <thead>
+                            <tr>
+                                <th>Box</th>
+                                <th>Data</th>
+                                <th>Fornecedor / Cliente</th>
+                                <th>Medida</th>
+                                <th class="num">Quantidade</th>
+                                <th class="actions-col">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-conferencias-box"></tbody>
+                    </table>
+                </div>
+                <div id="empty-box-records" class="empty-state hidden">Nenhuma conferência de Box cadastrada.</div>
             </div>
         </section>
 
         <section id="tab-dashboard" class="tab-panel">
             <div class="card">
                 <h2>Dashboard de Estoque</h2>
-                <p class="section-desc">As conferências não alteram o saldo. O estoque é separado por item e unidade; boxes e seus componentes são controlados independentemente.</p>
+                <p class="section-desc">As conferências não alteram o saldo. O estoque é separado por item e unidade, e os lançamentos dos Boxes ficam registrados na aba Boxes.</p>
             </div>
 
             <div class="kpi-grid">
@@ -359,7 +379,7 @@
                             <thead>
                                 <tr>
                                     <th>Fornecedor / Cliente</th>
-                                    <th>Tipo de Item / Modelo de box</th>
+                                    <th>Box / Tipo de Item</th>
                                     <th>Medida</th>
                                     <th class="num">Registros</th>
                                     <th class="num">Total Contado</th>
@@ -378,7 +398,7 @@
                             <tr>
                                 <th>Data</th>
                                 <th>Fornecedor / Cliente</th>
-                                <th>Tipo de Item / Modelo de box</th>
+                                <th>Box / Tipo de Item</th>
                                 <th>Medida</th>
                                 <th class="num">Pacotes</th>
                                 <th class="num">Unid./Pct</th>
@@ -470,29 +490,6 @@
                     <ul id="list-itens-estoque" class="standard-list inventory-list"></ul>
                 </div>
 
-                <div class="card">
-                    <h3>Modelos de box</h3>
-                    <p class="hint inventory-hint">Defina os componentes de cada modelo para consulta. Movimentar um box não altera automaticamente o saldo dos componentes.</p>
-                    <form id="form-modelo-box" class="inventory-form" autocomplete="off">
-                        <div class="grid-2">
-                            <div class="form-group">
-                                <label for="box-nome">Nome do modelo *</label>
-                                <input type="text" id="box-nome" maxlength="80" placeholder="Ex: Box exportação A" required />
-                            </div>
-                            <div class="form-group">
-                                <label for="box-unidade">Unidade do box *</label>
-                                <input type="text" id="box-unidade" maxlength="20" value="box" required />
-                            </div>
-                        </div>
-                        <div class="label-row">
-                            <label>Componentes por box</label>
-                            <button type="button" id="btn-add-box-component" class="btn btn-secondary btn-sm">Adicionar componente</button>
-                        </div>
-                        <div id="box-component-list" class="box-component-list"></div>
-                        <button type="submit" class="btn btn-primary btn-block">Salvar modelo de box</button>
-                    </form>
-                    <ul id="list-modelos-box" class="standard-list inventory-list"></ul>
-                </div>
             </div>
         </section>
     </main>
