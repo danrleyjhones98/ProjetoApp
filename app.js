@@ -1,4 +1,5 @@
 const STORAGE_KEY = "conferencia_madeiras_v1";
+const BOX_MODEL_VALUE_PREFIX = "box-model:";
 
 const DEFAULT_STATE = {
 clientes: [
@@ -82,6 +83,7 @@ typeof record.id === "string" &&
 typeof record.cliente === "string" &&
 typeof record.tipoItem === "string" &&
 typeof record.medida === "string" &&
+(record.modeloBoxId === undefined || typeof record.modeloBoxId === "string") &&
 typeof record.dataConferencia === "string" &&
 Number.isFinite(Number(record.qtdPacotes)) &&
 Number.isFinite(Number(record.qtdPorPacote)) &&
@@ -127,6 +129,12 @@ Number(component.quantidade) > 0
 )
 )) {
 throw new Error("Um ou mais modelos de box são inválidos.");
+}
+const boxModelIds = new Set(boxModels.map((model) => model.id));
+if (candidate.registros.some((record) =>
+record.modeloBoxId && (!boxModelIds.has(record.modeloBoxId) || record.tipoItem !== "Box")
+)) {
+throw new Error("Uma ou mais conferências fazem referência a modelos de box inválidos.");
 }
 
 const movements = candidate.movimentacoes === undefined ? [] : candidate.movimentacoes;
@@ -310,14 +318,67 @@ const curMedida = selectMedida.value;
 const curFCliente = filterCliente.value;
 const curFTipo = filterTipo.value;
 const curMovementItem = movementItem.value;
+const conferenceTypes = [...state.tipos];
+if (!conferenceTypes.some((type) => type.trim().toLocaleLowerCase("pt-BR") === "box")) {
+conferenceTypes.push("Box");
+}
 
 fillSelect(selectCliente, state.clientes, "Selecione o fornecedor/cliente...", curCliente);
-fillSelect(selectTipo, state.tipos, "Selecione o tipo de item...", curTipo);
+renderConferenceTypeSelect(curTipo);
 fillSelect(selectMedida, state.medidas, "Selecione a medida...", curMedida);
 
 fillSelect(filterCliente, state.clientes, "Todos os fornecedores/clientes", curFCliente);
-fillSelect(filterTipo, state.tipos, "Todos os itens", curFTipo);
+fillSelect(filterTipo, conferenceTypes, "Todos os itens", curFTipo);
 renderInventorySelects(curMovementItem);
+}
+
+function renderConferenceTypeSelect(selectedValue = document.getElementById("select-tipo").value) {
+const select = document.getElementById("select-tipo");
+select.innerHTML = '<option value="">Selecione o item ou modelo de box...</option>';
+
+const itemTypes = state.tipos.filter((type) => type.trim().toLocaleLowerCase("pt-BR") !== "box");
+if (
+state.tipos.some((type) => type.trim().toLocaleLowerCase("pt-BR") === "box") ||
+state.registros.some((record) => record.tipoItem === "Box" && !record.modeloBoxId)
+) {
+itemTypes.push("Box");
+}
+if (itemTypes.length > 0) {
+const itemGroup = document.createElement("optgroup");
+itemGroup.label = "Madeiras e outros itens";
+itemTypes.forEach((type) => {
+const option = document.createElement("option");
+option.value = type;
+option.textContent = type;
+option.selected = type === selectedValue;
+itemGroup.appendChild(option);
+});
+select.appendChild(itemGroup);
+}
+
+if (state.modelosBox.length > 0) {
+const boxGroup = document.createElement("optgroup");
+boxGroup.label = "Modelos de box";
+state.modelosBox.forEach((model) => {
+const option = document.createElement("option");
+option.value = `${BOX_MODEL_VALUE_PREFIX}${model.id}`;
+option.textContent = model.nome;
+option.selected = option.value === selectedValue;
+boxGroup.appendChild(option);
+});
+select.appendChild(boxGroup);
+}
+}
+
+function getConferenceBoxModelId(selectedValue) {
+return selectedValue.startsWith(BOX_MODEL_VALUE_PREFIX)
+? selectedValue.slice(BOX_MODEL_VALUE_PREFIX.length)
+: "";
+}
+
+function getConferenceTypeLabel(record) {
+if (!record.modeloBoxId) return record.tipoItem;
+return state.modelosBox.find((model) => model.id === record.modeloBoxId)?.nome || record.tipoItem;
 }
 
 function renderInventorySelects(selectedItemId = document.getElementById("mov-item").value) {
@@ -521,6 +582,10 @@ showToast("Item de estoque excluído.");
 function deleteBoxModel(id) {
 const model = state.modelosBox.find((entry) => entry.id === id);
 if (!model) return;
+if (state.registros.some((record) => record.modeloBoxId === id)) {
+showToast("Este modelo está vinculado a conferências e não pode ser excluído.");
+return;
+}
 if (state.movimentacoes.some((movement) => movement.itemId === model.itemId)) {
 showToast("Este modelo tem movimentações no histórico e não pode ser excluído.");
 return;
@@ -532,6 +597,7 @@ const items = state.itensEstoque.filter((item) => item.id !== model.itemId);
 if (!saveState({ ...state, modelosBox: models, itensEstoque: items })) return;
 state.modelosBox = models;
 state.itensEstoque = items;
+renderConferenceTypeSelect();
 renderInventoryItems();
 renderBoxModels();
 renderDashboard();
@@ -610,6 +676,7 @@ event.currentTarget.reset();
 document.getElementById("box-unidade").value = "box";
 document.getElementById("box-component-list").innerHTML = "";
 addBoxComponentRow();
+renderConferenceTypeSelect();
 renderInventoryItems();
 renderBoxModels();
 renderDashboard();
@@ -696,15 +763,26 @@ formConferencia.addEventListener("submit", (e) => {
 e.preventDefault();
 
 const editId = document.getElementById("edit-id").value;
+const selectedType = document.getElementById("select-tipo").value;
+const boxModelId = getConferenceBoxModelId(selectedType);
+const boxModel = boxModelId
+? state.modelosBox.find((model) => model.id === boxModelId)
+: null;
+if (boxModelId && !boxModel) {
+showToast("O modelo de box selecionado não está mais cadastrado.");
+return;
+}
+
 const record = {
 id: editId || String(Date.now()),
 cliente: document.getElementById("select-cliente").value,
-tipoItem: document.getElementById("select-tipo").value,
+tipoItem: boxModel ? "Box" : selectedType,
 medida: document.getElementById("select-medida").value,
 qtdPacotes: Number(inputPacotes.value) || 0,
 qtdPorPacote: Number(inputUnidPacote.value) || 0,
 qtdTotalContada: Number(inputTotal.value) || 0,
-dataConferencia: document.getElementById("input-data").value
+dataConferencia: document.getElementById("input-data").value,
+...(boxModel ? { modeloBoxId: boxModel.id } : {})
 };
 
 if (editId) {
@@ -755,11 +833,11 @@ return true;
 function getMaterialTotals(records) {
 const totals = new Map();
 records.forEach((record) => {
-const key = JSON.stringify([record.cliente, record.tipoItem, record.medida]);
+const key = JSON.stringify([record.cliente, record.tipoItem, record.modeloBoxId || "", record.medida]);
 if (!totals.has(key)) {
 totals.set(key, {
 fornecedor: record.cliente,
-tipoItem: record.tipoItem,
+tipoItem: getConferenceTypeLabel(record),
 medida: record.medida,
 registros: 0,
 totalContado: 0
@@ -791,7 +869,7 @@ const tr = document.createElement("tr");
 tr.innerHTML = `
 <td>${formatDateBR(r.dataConferencia)}</td>
 <td><strong>${escapeHTML(r.cliente)}</strong></td>
-<td>${escapeHTML(r.tipoItem)}</td>
+<td>${escapeHTML(getConferenceTypeLabel(r))}</td>
 <td>${escapeHTML(r.medida)}</td>
 <td class="num">${formatNumber(r.qtdPacotes)}</td>
 <td class="num">${formatNumber(r.qtdPorPacote)}</td>
@@ -807,7 +885,9 @@ tbody.appendChild(tr);
 });
 
 const suppliers = new Set(filtered.map((record) => record.cliente));
-const materials = new Set(filtered.map((record) => JSON.stringify([record.tipoItem, record.medida])));
+const materials = new Set(filtered.map((record) =>
+JSON.stringify([record.tipoItem, record.modeloBoxId || "", record.medida])
+));
 document.getElementById("kpi-registros").textContent = formatNumber(filtered.length);
 document.getElementById("kpi-fornecedores").textContent = formatNumber(suppliers.size);
 document.getElementById("kpi-materiais").textContent = formatNumber(materials.size);
@@ -849,7 +929,9 @@ if (!r) return;
 
 document.getElementById("edit-id").value = r.id;
 document.getElementById("select-cliente").value = r.cliente;
-document.getElementById("select-tipo").value = r.tipoItem;
+document.getElementById("select-tipo").value = r.modeloBoxId
+? `${BOX_MODEL_VALUE_PREFIX}${r.modeloBoxId}`
+: r.tipoItem;
 document.getElementById("select-medida").value = r.medida;
 inputPacotes.value = r.qtdPacotes;
 inputUnidPacote.value = r.qtdPorPacote;
@@ -1098,7 +1180,7 @@ rows.forEach((r) => {
 csvLines.push([
 formatDateBR(r.dataConferencia),
 `"${String(r.cliente).replace(/"/g, '""')}"`,
-`"${String(r.tipoItem).replace(/"/g, '""')}"`,
+`"${String(getConferenceTypeLabel(r)).replace(/"/g, '""')}"`,
 `"${String(r.medida).replace(/"/g, '""')}"`,
 r.qtdPacotes,
 r.qtdPorPacote,

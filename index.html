@@ -62,6 +62,18 @@
                     <input type="hidden" id="edit-id" value="" />
 
                     <div class="form-group">
+                        <label for="select-tipo">Box / Tipo de Item *</label>
+                        <div class="select-with-add">
+                            <select id="select-tipo" required>
+                                <option value="">Selecione o item ou modelo de box...</option>
+                            </select>
+                            <button type="button" class="btn-quick-add" data-target="tipos"
+                                title="Adicionar novo tipo de item">+</button>
+                        </div>
+                        <small class="hint">Os modelos de box cadastrados em Padrões aparecem nesta lista.</small>
+                    </div>
+
+                    <div class="form-group">
                         <label for="select-cliente">Fornecedor / Cliente *</label>
                         <div class="select-with-add">
                             <select id="select-cliente" required>
@@ -69,17 +81,6 @@
                             </select>
                             <button type="button" class="btn-quick-add" data-target="clientes"
                                 title="Adicionar fornecedor/cliente">+</button>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="select-tipo">Tipo de Item (Madeira) *</label>
-                        <div class="select-with-add">
-                            <select id="select-tipo" required>
-                                <option value="">Selecione o tipo de item...</option>
-                            </select>
-                            <button type="button" class="btn-quick-add" data-target="tipos"
-                                title="Adicionar novo tipo de item">+</button>
                         </div>
                     </div>
 
@@ -358,7 +359,7 @@
                             <thead>
                                 <tr>
                                     <th>Fornecedor / Cliente</th>
-                                    <th>Tipo de Item</th>
+                                    <th>Tipo de Item / Modelo de box</th>
                                     <th>Medida</th>
                                     <th class="num">Registros</th>
                                     <th class="num">Total Contado</th>
@@ -377,7 +378,7 @@
                             <tr>
                                 <th>Data</th>
                                 <th>Fornecedor / Cliente</th>
-                                <th>Tipo de Item</th>
+                                <th>Tipo de Item / Modelo de box</th>
                                 <th>Medida</th>
                                 <th class="num">Pacotes</th>
                                 <th class="num">Unid./Pct</th>

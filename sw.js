@@ -1,4 +1,4 @@
-const CACHE_NAME = "conferencia-madeiras-v2";
+const CACHE_NAME = "conferencia-madeiras-v3";
 const APP_SHELL = [
   "./",
   "./index.html",
