@@ -5,6 +5,27 @@ const BOX_MODEL_VALUE_PREFIX = "box-model:";
 const BOX_ENTRY_VALUE_PREFIX = "box-entry:";
 const LEGACY_TYPE_VALUE_PREFIX = "legacy-type:";
 const BOX_NUMBERS = Array.from({ length: 36 }, (_, index) => index + 1);
+const IMPORTED_CSV_DATA_VERSION = 1;
+const IMPORTED_CSV_DATA = {
+client: "Cliente Padrão",
+itemType: "Régua",
+measure: "medida exclusiva teste",
+record: {
+id: "csv-conferencia-2026-11-27-box-1",
+cliente: "Cliente Padrão",
+tipoItem: "Régua",
+medida: "medida exclusiva teste",
+qtdPacotes: 2,
+qtdPorPacote: 750,
+qtdLinhasPorPacote: 15,
+qtdColunasPorPacote: 50,
+qtdTotalContada: 1500,
+dataRecebimento: "2026-11-26",
+dataConferencia: "2026-11-27",
+boxId: "number-1",
+boxNumber: 1
+}
+};
 
 function createDefaultBoxes() {
 return BOX_NUMBERS.map((number) => ({
@@ -52,19 +73,20 @@ let syncInProgress = false;
 let applyingRemoteState = false;
 
 function createDefaultState() {
-return {
+return applyImportedCsvData({
 boxes: createDefaultBoxes(),
 clientes: [...DEFAULT_STATE.clientes],
 tipos: [...DEFAULT_STATE.tipos],
 medidas: [...DEFAULT_STATE.medidas],
 medidasPorTipo: createMeasuresByType(DEFAULT_STATE.tipos, DEFAULT_STATE.medidas),
 medidasPadraoPorClienteETipo: Object.create(null),
+bundledDataVersion: 0,
 registros: [],
 movimentacoes: [],
 lancamentosFinanceiros: [],
 itensEstoque: [],
 modelosBox: []
-};
+});
 }
 
 function createMeasuresByType(types, measures) {
@@ -87,7 +109,17 @@ return createDefaultState();
 if (!raw) return createDefaultState();
 
 try {
-return normalizeState(JSON.parse(raw), DEFAULT_STATE);
+const normalized = normalizeState(JSON.parse(raw), DEFAULT_STATE);
+const upgraded = applyImportedCsvData(normalized);
+if (upgraded !== normalized) {
+try {
+localStorage.setItem(STORAGE_KEY, JSON.stringify(upgraded));
+} catch (error) {
+console.error("Não foi possível salvar a importação inicial neste aparelho.", error);
+showToast("Os dados importados foram carregados, mas não puderam ser salvos neste aparelho.");
+}
+}
+return upgraded;
 } catch (error) {
 console.error("Os dados locais não puderam ser carregados.", error);
 showToast("Os dados locais estão inválidos. Use um backup para restaurá-los.");
@@ -95,9 +127,79 @@ return createDefaultState();
 }
 }
 
+function applyImportedCsvData(sourceState) {
+if (sourceState.bundledDataVersion >= IMPORTED_CSV_DATA_VERSION) return sourceState;
+
+const imported = IMPORTED_CSV_DATA;
+const nextMeasuresByType = Object.create(null);
+Object.keys(sourceState.medidasPorTipo).forEach((itemType) => {
+nextMeasuresByType[itemType] = [...sourceState.medidasPorTipo[itemType]];
+});
+const typeMeasures = nextMeasuresByType[imported.itemType] || [];
+if (!typeMeasures.includes(imported.measure)) {
+nextMeasuresByType[imported.itemType] = [...typeMeasures, imported.measure];
+}
+
+const nextClientDefaults = Object.create(null);
+Object.keys(sourceState.medidasPadraoPorClienteETipo).forEach((client) => {
+nextClientDefaults[client] = Object.assign(
+Object.create(null),
+sourceState.medidasPadraoPorClienteETipo[client]
+);
+});
+const clientDefaults = Object.assign(
+Object.create(null),
+nextClientDefaults[imported.client] || {}
+);
+if (!clientDefaults[imported.itemType]) clientDefaults[imported.itemType] = imported.measure;
+nextClientDefaults[imported.client] = clientDefaults;
+
+const recordAlreadyImported = sourceState.registros.some((record) =>
+record.cliente === imported.record.cliente &&
+record.tipoItem === imported.record.tipoItem &&
+record.medida === imported.record.medida &&
+Number(record.qtdPacotes) === imported.record.qtdPacotes &&
+Number(record.qtdPorPacote) === imported.record.qtdPorPacote &&
+Number(record.qtdTotalContada) === imported.record.qtdTotalContada &&
+record.dataRecebimento === imported.record.dataRecebimento &&
+record.dataConferencia === imported.record.dataConferencia &&
+(record.boxId === imported.record.boxId || record.boxNumber === imported.record.boxNumber)
+);
+const nextRecords = [...sourceState.registros];
+if (!recordAlreadyImported) {
+const recordId = nextRecords.some((record) => record.id === imported.record.id)
+? createEntryId("csv-conferencia")
+: imported.record.id;
+nextRecords.unshift({ ...imported.record, id: recordId });
+}
+
+return {
+...sourceState,
+clientes: sourceState.clientes.includes(imported.client)
+? [...sourceState.clientes]
+: [...sourceState.clientes, imported.client],
+tipos: sourceState.tipos.includes(imported.itemType)
+? [...sourceState.tipos]
+: [...sourceState.tipos, imported.itemType],
+medidas: sourceState.medidas.includes(imported.measure)
+? [...sourceState.medidas]
+: [...sourceState.medidas, imported.measure],
+medidasPorTipo: nextMeasuresByType,
+medidasPadraoPorClienteETipo: nextClientDefaults,
+registros: nextRecords,
+bundledDataVersion: IMPORTED_CSV_DATA_VERSION
+};
+}
+
 function normalizeState(candidate, fallback) {
 if (!candidate || typeof candidate !== "object" || !Array.isArray(candidate.registros)) {
 throw new Error("O backup não contém uma lista de registros válida.");
+}
+const bundledDataVersion = candidate.bundledDataVersion === undefined
+? 0
+: candidate.bundledDataVersion;
+if (!Number.isSafeInteger(bundledDataVersion) || bundledDataVersion < 0) {
+throw new Error("A versão dos dados importados é inválida.");
 }
 
 const boxes = normalizeBoxes(candidate.boxes);
@@ -306,6 +408,7 @@ tipos: types,
 medidas: allMeasures,
 medidasPorTipo: measuresByType,
 medidasPadraoPorClienteETipo: defaultMeasuresByClientAndType,
+bundledDataVersion,
 registros: candidate.registros.map((record) => (
 record.boxNumber !== undefined && record.boxId === undefined
 ? { ...record, boxId: `number-${record.boxNumber}` }
@@ -499,7 +602,7 @@ snapshot: serializedState(candidate)
 }
 
 function refreshAfterCloudLoad(cloudState) {
-const normalized = normalizeState(cloudState, DEFAULT_STATE);
+const normalized = applyImportedCsvData(normalizeState(cloudState, DEFAULT_STATE));
 applyingRemoteState = true;
 try {
 if (!saveState(normalized)) throw new Error("Não foi possível salvar os dados baixados neste aparelho.");
@@ -2132,7 +2235,7 @@ return;
 const reader = new FileReader();
 reader.onload = () => {
 try {
-const imported = normalizeState(JSON.parse(reader.result), state);
+const imported = applyImportedCsvData(normalizeState(JSON.parse(reader.result), state));
 if (!saveState(imported)) return;
 state = imported;
 renderSelects();
