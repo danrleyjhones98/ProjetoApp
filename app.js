@@ -57,12 +57,21 @@ boxes: createDefaultBoxes(),
 clientes: [...DEFAULT_STATE.clientes],
 tipos: [...DEFAULT_STATE.tipos],
 medidas: [...DEFAULT_STATE.medidas],
+medidasPorTipo: createMeasuresByType(DEFAULT_STATE.tipos, DEFAULT_STATE.medidas),
 registros: [],
 movimentacoes: [],
 lancamentosFinanceiros: [],
 itensEstoque: [],
 modelosBox: []
 };
+}
+
+function createMeasuresByType(types, measures) {
+const measuresByType = Object.create(null);
+types.forEach((type) => {
+measuresByType[type] = [...measures];
+});
+return measuresByType;
 }
 
 function loadState() {
@@ -126,7 +135,15 @@ Number.isFinite(Number(record.qtdPorPacote)) &&
 Number.isFinite(Number(record.qtdTotalContada)) &&
 Number(record.qtdPacotes) >= 0 &&
 Number(record.qtdPorPacote) >= 0 &&
-Number(record.qtdTotalContada) >= 0
+Number(record.qtdTotalContada) >= 0 &&
+((record.qtdLinhasPorPacote === undefined && record.qtdColunasPorPacote === undefined) ||
+(
+Number.isSafeInteger(record.qtdLinhasPorPacote) &&
+Number.isSafeInteger(record.qtdColunasPorPacote) &&
+record.qtdLinhasPorPacote > 0 &&
+record.qtdColunasPorPacote > 0 &&
+record.qtdLinhasPorPacote * record.qtdColunasPorPacote === Number(record.qtdPorPacote)
+))
 );
 if (!validRecords) throw new Error("Um ou mais registros do backup são inválidos.");
 
@@ -224,11 +241,42 @@ if (!types.some((type) => type.trim().toLocaleLowerCase("pt-BR") === "pallet")) 
 types.push("Pallet");
 }
 
+const legacyMeasures = candidate.medidas ? [...candidate.medidas] : [...fallback.medidas];
+const measuresByType = Object.create(null);
+if (candidate.medidasPorTipo === undefined) {
+types.forEach((type) => {
+measuresByType[type] = [...legacyMeasures];
+});
+} else {
+const source = candidate.medidasPorTipo;
+if (!source || typeof source !== "object" || Array.isArray(source) ||
+!Object.keys(source).every((type) =>
+Array.isArray(source[type]) && source[type].every((measure) => typeof measure === "string")
+)) {
+throw new Error("A lista de medidas por tipo de item é inválida.");
+}
+Object.keys(source).forEach((type) => {
+measuresByType[type] = [...source[type]];
+});
+types.forEach((type) => {
+if (!Object.prototype.hasOwnProperty.call(measuresByType, type)) measuresByType[type] = [];
+});
+}
+const allMeasures = [...legacyMeasures];
+Object.keys(measuresByType).forEach((type) => {
+measuresByType[type].forEach((measure) => {
+if (!allMeasures.some((item) => item.toLocaleLowerCase("pt-BR") === measure.toLocaleLowerCase("pt-BR"))) {
+allMeasures.push(measure);
+}
+});
+});
+
 return {
 boxes,
 clientes: candidate.clientes ? [...candidate.clientes] : [...fallback.clientes],
 tipos: types,
-medidas: candidate.medidas ? [...candidate.medidas] : [...fallback.medidas],
+medidas: allMeasures,
+medidasPorTipo: measuresByType,
 registros: candidate.registros.map((record) => (
 record.boxNumber !== undefined && record.boxId === undefined
 ? { ...record, boxId: `number-${record.boxNumber}` }
@@ -730,7 +778,7 @@ fillSelect(selectCliente, state.clientes, "", curCliente);
 renderConferenceTypeSelect(curTipo);
 renderBoxNameEditSelect();
 renderItemTypeSelect(curItemType);
-fillSelect(selectMedida, state.medidas, "", curMedida);
+renderMeasureSelect(curItemType, curMedida);
 
 fillSelect(filterCliente, state.clientes, "Todos os clientes", curFCliente);
 fillSelect(filterTipo, conferenceTypes, "Todos os itens", curFTipo);
@@ -753,6 +801,28 @@ legacyGroup.appendChild(option);
 select.appendChild(legacyGroup);
 }
 }
+
+function renderMeasureSelect(itemType, selectedValue = "") {
+const select = document.getElementById("select-medida");
+const measures = itemType ? state.medidasPorTipo[itemType] || [] : [];
+fillSelect(select, measures, "", selectedValue);
+
+if (selectedValue && !measures.includes(selectedValue)) {
+const legacyGroup = document.createElement("optgroup");
+legacyGroup.label = "Registro anterior";
+const option = document.createElement("option");
+option.value = selectedValue;
+option.textContent = selectedValue;
+option.selected = true;
+legacyGroup.appendChild(option);
+select.appendChild(legacyGroup);
+}
+}
+
+document.getElementById("select-item-type").addEventListener("change", (event) => {
+renderMeasureSelect(event.currentTarget.value);
+updateVolumePreview();
+});
 
 function renderConferenceTypeSelect(selectedValue = document.getElementById("select-tipo").value) {
 const select = document.getElementById("select-tipo");
@@ -899,10 +969,97 @@ selectEl.appendChild(opt);
 });
 }
 
+function renderMeasuresByType() {
+const typeSelect = document.getElementById("select-measure-type");
+const selectedType = typeSelect.value;
+fillSelect(typeSelect, state.tipos, "", selectedType);
+
+const list = document.getElementById("list-medidas");
+list.innerHTML = "";
+if (!typeSelect.value) {
+list.innerHTML = '<li class="list-empty">Selecione um tipo de item.</li>';
+return;
+}
+
+const itemType = typeSelect.value;
+const measures = state.medidasPorTipo[itemType] || [];
+if (measures.length === 0) {
+list.innerHTML = '<li class="list-empty">Nenhuma medida cadastrada para este tipo.</li>';
+return;
+}
+
+measures.forEach((measure, index) => {
+const item = document.createElement("li");
+const label = document.createElement("span");
+label.textContent = measure;
+const button = document.createElement("button");
+button.type = "button";
+button.className = "btn-del-item";
+button.textContent = "Excluir";
+button.addEventListener("click", () => {
+if (document.getElementById("select-item-type").value === itemType &&
+document.getElementById("select-medida").value === measure) {
+document.getElementById("select-medida").value = "";
+}
+const nextMeasuresByType = Object.create(null);
+Object.keys(state.medidasPorTipo).forEach((type) => {
+nextMeasuresByType[type] = [...state.medidasPorTipo[type]];
+});
+nextMeasuresByType[itemType].splice(index, 1);
+const nextState = {
+...state,
+medidas: [...new Set(Object.values(nextMeasuresByType).flat())],
+medidasPorTipo: nextMeasuresByType
+};
+if (!saveState(nextState)) return;
+state = nextState;
+renderSelects();
+renderStandardLists();
+showToast("Medida removida deste tipo de item.");
+});
+item.append(label, button);
+list.appendChild(item);
+});
+}
+
+document.getElementById("select-measure-type").addEventListener("change", renderMeasuresByType);
+
+document.getElementById("form-add-measure").addEventListener("submit", (event) => {
+event.preventDefault();
+const itemType = document.getElementById("select-measure-type").value;
+const input = event.currentTarget.querySelector("input");
+const measure = input.value.trim();
+if (!itemType) {
+showToast("Selecione um tipo de item antes de cadastrar a medida.");
+return;
+}
+if (!measure) return;
+
+const measures = state.medidasPorTipo[itemType] || [];
+if (measures.some((item) => item.toLocaleLowerCase("pt-BR") === measure.toLocaleLowerCase("pt-BR"))) {
+showToast("Esta medida já está cadastrada para este tipo de item.");
+return;
+}
+
+const nextMeasuresByType = Object.create(null);
+Object.keys(state.medidasPorTipo).forEach((type) => {
+nextMeasuresByType[type] = [...state.medidasPorTipo[type]];
+});
+nextMeasuresByType[itemType] = [...measures, measure];
+const allMeasures = [...new Set(Object.values(nextMeasuresByType).flat())];
+const nextState = { ...state, medidas: allMeasures, medidasPorTipo: nextMeasuresByType };
+if (!saveState(nextState)) return;
+state = nextState;
+input.value = "";
+renderSelects();
+renderStandardLists();
+showToast(`"${measure}" adicionada para ${itemType}.`);
+});
+
 function renderStandardLists() {
 renderList("clientes", "list-clientes");
 renderList("tipos", "list-tipos");
-renderList("medidas", "list-medidas");
+renderMeasuresByType();
 renderInventoryItems();
 }
 
@@ -1071,6 +1228,7 @@ showToast("Item de estoque cadastrado.");
 document.querySelectorAll(".add-standard-form").forEach((form) => {
 form.addEventListener("submit", (e) => {
 e.preventDefault();
+if (form.id === "form-add-measure") return;
 const listKey = form.dataset.list;
 const input = form.querySelector("input");
 const val = input.value.trim();
@@ -1078,6 +1236,9 @@ if (!val) return;
 
 if (!state[listKey].some((x) => x.toLowerCase() === val.toLowerCase())) {
 state[listKey].push(val);
+if (listKey === "tipos" && !state.medidasPorTipo[val]) {
+state.medidasPorTipo[val] = [];
+}
 saveState();
 renderSelects();
 renderStandardLists();
@@ -1093,26 +1254,57 @@ input.value = "";
 document.querySelectorAll(".btn-quick-add").forEach((btn) => {
 btn.addEventListener("click", () => {
 const target = btn.dataset.target;
+if (target === "medidas") {
+const itemType = document.getElementById("select-item-type").value;
+if (!itemType) {
+showToast("Selecione um tipo de item antes de adicionar uma medida.");
+return;
+}
+const novo = prompt("Nova Medida (ex: 1,10 x 0,07 x 0,019):");
+if (!novo || !novo.trim()) return;
+const clean = novo.trim();
+const measures = state.medidasPorTipo[itemType] || [];
+if (measures.some((measure) => measure.toLocaleLowerCase("pt-BR") === clean.toLocaleLowerCase("pt-BR"))) {
+showToast("Esta medida já está cadastrada para este tipo de item.");
+return;
+}
+const nextMeasuresByType = { ...state.medidasPorTipo, [itemType]: [...measures, clean] };
+const nextState = {
+...state,
+medidas: [...new Set(Object.values(nextMeasuresByType).flat())],
+medidasPorTipo: nextMeasuresByType
+};
+if (!saveState(nextState)) return;
+state = nextState;
+renderMeasuresByType();
+renderMeasureSelect(itemType, clean);
+updateVolumePreview();
+showToast(`"${clean}" selecionada para ${itemType}.`);
+return;
+}
+
 const labels = {
 clientes: "Novo Cliente:",
-tipos: "Novo Tipo de Item (Madeira):",
-medidas: "Nova Medida (ex: 1,10 x 0,07 x 0,019):"
+tipos: "Novo Tipo de Item (Madeira):"
 };
 const selectIds = {
 clientes: "select-cliente",
-tipos: "select-item-type",
-medidas: "select-medida"
+tipos: "select-item-type"
 };
 const novo = prompt(labels[target]);
 if (!novo || !novo.trim()) return;
 const clean = novo.trim();
 if (!state[target].some((x) => x.toLowerCase() === clean.toLowerCase())) {
 state[target].push(clean);
+if (target === "tipos" && !state.medidasPorTipo[clean]) {
+state.medidasPorTipo[clean] = [];
+}
 saveState();
 renderSelects();
 renderStandardLists();
 }
 document.getElementById(selectIds[target]).value = clean;
+if (target === "tipos") renderMeasureSelect(clean);
 updateVolumePreview();
 showToast(`"${clean}" selecionado!`);
 });
@@ -1121,6 +1313,8 @@ showToast(`"${clean}" selecionado!`);
 // Auto-calculate total units
 const inputPacotes = document.getElementById("input-pacotes");
 const inputUnidPacote = document.getElementById("input-unid-pacote");
+const inputLinhasPacote = document.getElementById("input-linhas-pacote");
+const inputColunasPacote = document.getElementById("input-colunas-pacote");
 const inputTotal = document.getElementById("input-total");
 const totalModeTag = document.getElementById("total-mode-tag");
 
@@ -1138,6 +1332,24 @@ updateVolumePreview();
 
 inputPacotes.addEventListener("input", updateAutoTotal);
 inputUnidPacote.addEventListener("input", updateAutoTotal);
+
+function updatePackageGrid() {
+const hasLines = inputLinhasPacote.value !== "";
+const hasColumns = inputColunasPacote.value !== "";
+inputUnidPacote.readOnly = hasLines && hasColumns;
+
+if (hasLines && hasColumns) {
+const lines = Number(inputLinhasPacote.value);
+const columns = Number(inputColunasPacote.value);
+const units = lines * columns;
+inputUnidPacote.value = Number.isSafeInteger(lines) && Number.isSafeInteger(columns) &&
+lines > 0 && columns > 0 && Number.isSafeInteger(units) ? String(units) : "";
+}
+updateAutoTotal();
+}
+
+inputLinhasPacote.addEventListener("input", updatePackageGrid);
+inputColunasPacote.addEventListener("input", updatePackageGrid);
 
 inputTotal.addEventListener("input", () => {
 manualTotalOverride = true;
@@ -1165,6 +1377,24 @@ showToast("O modelo de box selecionado não está mais cadastrado.");
 return;
 }
 const totalQuantity = Number(inputTotal.value);
+const hasLines = inputLinhasPacote.value !== "";
+const hasColumns = inputColunasPacote.value !== "";
+if (hasLines !== hasColumns) {
+showToast("Preencha linhas e colunas por pacote ou deixe os dois campos em branco.");
+return;
+}
+const packageLines = hasLines ? Number(inputLinhasPacote.value) : null;
+const packageColumns = hasColumns ? Number(inputColunasPacote.value) : null;
+if (hasLines && (
+!Number.isSafeInteger(packageLines) ||
+!Number.isSafeInteger(packageColumns) ||
+packageLines < 1 ||
+packageColumns < 1 ||
+packageLines * packageColumns !== Number(inputUnidPacote.value)
+)) {
+showToast("Linhas × colunas deve corresponder às unidades por pacote.");
+return;
+}
 if (selectedBox && (!Number.isInteger(totalQuantity) || totalQuantity < 1)) {
 showToast("Informe uma quantidade total válida para o Box.");
 return;
@@ -1181,6 +1411,10 @@ tipoItem: selectedItemType,
 medida: document.getElementById("select-medida").value,
 qtdPacotes: Number(inputPacotes.value) || 0,
 qtdPorPacote: Number(inputUnidPacote.value) || 0,
+...(hasLines ? {
+qtdLinhasPorPacote: packageLines,
+qtdColunasPorPacote: packageColumns
+} : {}),
 qtdTotalContada: totalQuantity || 0,
 dataRecebimento: receiptDate,
 dataConferencia: document.getElementById("input-data").value,
@@ -1217,9 +1451,12 @@ renderConferenceTypeSelect("");
 document.getElementById("select-item-type").value = "";
 renderItemTypeSelect("");
 document.getElementById("select-cliente").value = "";
-document.getElementById("select-medida").value = "";
+renderMeasureSelect("");
 inputPacotes.value = "";
 inputUnidPacote.value = "";
+inputLinhasPacote.value = "";
+inputColunasPacote.value = "";
+inputUnidPacote.readOnly = false;
 inputTotal.value = "";
 updateVolumePreview();
 manualTotalOverride = false;
@@ -1248,6 +1485,8 @@ tbody.innerHTML = records.map((record) => `
 <td>${escapeHTML(record.medida)}</td>
 <td class="num">${record.qtdPacotes === 0 && record.qtdPorPacote === 0 ? "—" : formatNumber(record.qtdPacotes)}</td>
 <td class="num">${record.qtdPacotes === 0 && record.qtdPorPacote === 0 ? "—" : formatNumber(record.qtdPorPacote)}</td>
+<td class="num">${record.qtdLinhasPorPacote ? formatNumber(record.qtdLinhasPorPacote) : "—"}</td>
+<td class="num">${record.qtdColunasPorPacote ? formatNumber(record.qtdColunasPorPacote) : "—"}</td>
 <td class="num">${formatNumber(record.qtdTotalContada)}</td>
 <td class="num">${formatVolumeM3(record.medida, record.qtdTotalContada)}</td>
 <td class="actions-col">
@@ -1297,7 +1536,8 @@ record.medida
 if (!totals.has(key)) {
 totals.set(key, {
 cliente: record.cliente,
-tipoItem: getConferenceTypeLabel(record),
+boxName: getRecordBoxName(record) || "—",
+itemType: getItemTypeLabel(record),
 medida: record.medida,
 registros: 0,
 totalContado: 0,
@@ -1316,7 +1556,8 @@ else group.totalM3 += volume;
 
 return [...totals.values()].sort((a, b) =>
 a.cliente.localeCompare(b.cliente, "pt-BR") ||
-a.tipoItem.localeCompare(b.tipoItem, "pt-BR") ||
+a.boxName.localeCompare(b.boxName, "pt-BR") ||
+a.itemType.localeCompare(b.itemType, "pt-BR") ||
 a.medida.localeCompare(b.medida, "pt-BR"));
 }
 
@@ -1334,9 +1575,12 @@ const tr = document.createElement("tr");
 tr.innerHTML = `
 <td>${formatDateBR(r.dataConferencia)}</td>
 <td><strong>${escapeHTML(r.cliente)}</strong></td>
-<td>${escapeHTML(getConferenceTypeLabel(r))}</td>
+<td>${escapeHTML(getRecordBoxName(r) || "—")}</td>
+<td>${escapeHTML(getItemTypeLabel(r))}</td>
 <td>${escapeHTML(r.medida)}</td>
 <td class="num">${getRecordBoxId(r) && r.qtdPacotes === 0 && r.qtdPorPacote === 0 ? "—" : formatNumber(r.qtdPacotes)}</td>
+<td class="num">${r.qtdLinhasPorPacote ? formatNumber(r.qtdLinhasPorPacote) : "—"}</td>
+<td class="num">${r.qtdColunasPorPacote ? formatNumber(r.qtdColunasPorPacote) : "—"}</td>
 <td class="num">${getRecordBoxId(r) && r.qtdPacotes === 0 && r.qtdPorPacote === 0 ? "—" : formatNumber(r.qtdPorPacote)}</td>
 <td class="num"><strong>${formatNumber(r.qtdTotalContada)}</strong></td>
 <td class="num">${formatVolumeM3(r.medida, r.qtdTotalContada)}</td>
@@ -1362,7 +1606,8 @@ const summaryBody = document.getElementById("tbody-resumo-materiais");
 summaryBody.innerHTML = materialTotals.map((group) => `
 <tr>
 <td><strong>${escapeHTML(group.cliente)}</strong></td>
-<td>${escapeHTML(group.tipoItem)}</td>
+<td>${escapeHTML(group.boxName)}</td>
+<td>${escapeHTML(group.itemType)}</td>
 <td>${escapeHTML(group.medida)}</td>
 <td class="num">${formatNumber(group.registros)}</td>
 <td class="num"><strong>${formatNumber(group.totalContado)}</strong></td>
@@ -1404,12 +1649,15 @@ const selectedType = isBoxEntry
 : `${LEGACY_TYPE_VALUE_PREFIX}${r.tipoItem}`;
 renderConferenceTypeSelect(selectedType);
 renderItemTypeSelect(r.tipoItem);
+renderMeasureSelect(r.tipoItem, r.medida);
 document.getElementById("edit-id").value = r.id;
 document.getElementById("select-cliente").value = r.cliente;
 document.getElementById("select-tipo").value = selectedType;
-document.getElementById("select-medida").value = r.medida;
 inputPacotes.value = r.qtdPacotes;
 inputUnidPacote.value = r.qtdPorPacote;
+inputLinhasPacote.value = r.qtdLinhasPorPacote || "";
+inputColunasPacote.value = r.qtdColunasPorPacote || "";
+inputUnidPacote.readOnly = Boolean(r.qtdLinhasPorPacote && r.qtdColunasPorPacote);
 inputTotal.value = r.qtdTotalContada;
 updateVolumePreview();
 document.getElementById("input-data").value = r.dataConferencia;
@@ -1651,9 +1899,12 @@ const header = [
 "Tempo desde a chegada",
 "Data da conferência diária",
 "Cliente",
+"Box",
 "Tipo de Item",
 "Medida",
 "Quantidade de Pacotes",
+"Quantidade em Linhas por Pacote",
+"Quantidade em Coluna por Pacote",
 "Unidades por Pacote",
 "Quantidade Total de Unidades",
 "Volume Total (m³)"
@@ -1666,9 +1917,12 @@ formatDateBR(r.dataRecebimento),
 formatStorageDuration(r.dataRecebimento),
 formatDateBR(r.dataConferencia),
 `"${String(r.cliente).replace(/"/g, '""')}"`,
-`"${String(getConferenceTypeLabel(r)).replace(/"/g, '""')}"`,
+`"${String(getRecordBoxName(r) || "—").replace(/"/g, '""')}"`,
+`"${String(getItemTypeLabel(r)).replace(/"/g, '""')}"`,
 `"${String(r.medida).replace(/"/g, '""')}"`,
 r.qtdPacotes,
+r.qtdLinhasPorPacote || "",
+r.qtdColunasPorPacote || "",
 r.qtdPorPacote,
 r.qtdTotalContada,
 formatVolumeM3(r.medida, r.qtdTotalContada)

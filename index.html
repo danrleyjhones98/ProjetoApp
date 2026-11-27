@@ -12,7 +12,7 @@
     <title>Conferência de Madeiras & Estoque</title>
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="./manifest.json" />
-    <link rel="stylesheet" href="./style.css?v=12" />
+    <link rel="stylesheet" href="./style.css?v=14" />
 </head>
 
 <body>
@@ -119,6 +119,19 @@
                         </div>
                     </div>
 
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label for="input-linhas-pacote">Quantidade em Linhas por Pacote</label>
+                            <input type="number" id="input-linhas-pacote" inputmode="numeric" min="1" step="1" />
+                        </div>
+                        <div class="form-group">
+                            <label for="input-colunas-pacote">Quantidade em Coluna por Pacote</label>
+                            <input type="number" id="input-colunas-pacote" inputmode="numeric" min="1" step="1" />
+                        </div>
+                    </div>
+                    <small class="hint">Preencha linhas e colunas para calcular automaticamente as unidades por pacote
+                        (linhas × colunas). Se deixar em branco, informe as unidades por pacote manualmente.</small>
+
                     <div class="form-group">
                         <div class="label-row">
                             <label for="input-total">Quantidade Total de Unidades *</label>
@@ -171,6 +184,8 @@
                                 <th>Medida</th>
                                 <th class="num">Quantidade de Pacotes</th>
                                 <th class="num">Unidades por Pacote</th>
+                                <th class="num">Quantidade em Linhas por Pacote</th>
+                                <th class="num">Quantidade em Coluna por Pacote</th>
                                 <th class="num">Total de Unidades</th>
                                 <th class="num">Total (m³)</th>
                                 <th class="actions-col">Ações</th>
@@ -367,7 +382,7 @@
                     <strong id="kpi-clientes" class="kpi-value">0</strong>
                 </div>
                 <div class="kpi-card highlight">
-                    <span class="kpi-label">Materiais (tipo + medida)</span>
+                    <span class="kpi-label">Materiais (Box + tipo + medida)</span>
                     <strong id="kpi-materiais" class="kpi-value">0</strong>
                 </div>
             </div>
@@ -400,13 +415,14 @@
 
                 <div class="summary-block">
                     <h3>Total contado por cliente e material</h3>
-                    <p class="hint">Cada linha soma somente o mesmo cliente, tipo de item e medida, respeitando os filtros aplicados.</p>
+                    <p class="hint">Cada linha soma somente o mesmo cliente, Box, tipo de item e medida, respeitando os filtros aplicados.</p>
                     <div class="table-wrapper">
                         <table class="excel-table">
                             <thead>
                                 <tr>
                                     <th>Cliente</th>
-                                    <th>Box / Tipo de Item</th>
+                                    <th>Box</th>
+                                    <th>Tipo de Item</th>
                                     <th>Medida</th>
                                     <th class="num">Registros</th>
                                     <th class="num">Total de Unidades</th>
@@ -426,9 +442,12 @@
                             <tr>
                                 <th>Data</th>
                                 <th>Cliente</th>
-                                <th>Box / Tipo de Item</th>
+                                <th>Box</th>
+                                <th>Tipo de Item</th>
                                 <th>Medida</th>
                                 <th class="num">Quantidade de Pacotes</th>
+                                <th class="num">Quantidade em Linhas por Pacote</th>
+                                <th class="num">Quantidade em Coluna por Pacote</th>
                                 <th class="num">Unidades por Pacote</th>
                                 <th class="num">Total de Unidades</th>
                                 <th class="num">Total (m³)</th>
@@ -526,14 +545,22 @@
                     <ul id="list-tipos" class="standard-list"></ul>
                 </div>
 
-                <!-- Medidas -->
+                <!-- Medidas por tipo de item -->
                 <div class="card">
-                    <h3>Medidas Padrão</h3>
-                    <form class="add-standard-form" data-list="medidas">
+                    <h3>Medidas por Tipo de Item</h3>
+                    <div class="form-group">
+                        <label for="select-measure-type">Tipo de Item</label>
+                        <select id="select-measure-type">
+                            <option value=""></option>
+                        </select>
+                    </div>
+                    <form id="form-add-measure" class="add-standard-form">
                         <input type="text" placeholder="Ex: 1,10 x 0,07 x 0,019" required />
                         <button type="submit" class="btn btn-primary btn-sm">Adicionar</button>
                     </form>
-                    <ul id="list-medidas" class="standard-list"></ul>
+                    <ul id="list-medidas" class="standard-list">
+                        <li class="list-empty">Selecione um tipo de item.</li>
+                    </ul>
                 </div>
             </div>
 
@@ -578,7 +605,7 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="./app.js?v=12"></script>
+    <script src="./app.js?v=14"></script>
 </body>
 
 </html>
