@@ -15,6 +15,7 @@ tipos: [
 "Barrote",
 "Linha Mista",
 "Palete PBR",
+"Pallet",
 "Tábua"
 ],
 medidas: [
@@ -92,7 +93,6 @@ typeof record.medida === "string" &&
 Number.isInteger(record.boxNumber) &&
 record.boxNumber >= 1 &&
 record.boxNumber <= 36 &&
-record.tipoItem === "Box" &&
 record.modeloBoxId === undefined
 )) &&
 typeof record.dataConferencia === "string" &&
@@ -194,9 +194,14 @@ const cashBalanceInCents = financialEntries.reduce((balance, entry) =>
 balance + (entry.operacao === "entrada" ? 1 : -1) * Math.round(Number(entry.valor) * 100), 0);
 if (cashBalanceInCents < 0) throw new Error("O backup contém saídas maiores que as entradas financeiras.");
 
+const types = candidate.tipos ? [...candidate.tipos] : [...fallback.tipos];
+if (!types.some((type) => type.trim().toLocaleLowerCase("pt-BR") === "pallet")) {
+types.push("Pallet");
+}
+
 return {
 clientes: candidate.clientes ? [...candidate.clientes] : [...fallback.clientes],
-tipos: candidate.tipos ? [...candidate.tipos] : [...fallback.tipos],
+tipos: types,
 medidas: candidate.medidas ? [...candidate.medidas] : [...fallback.medidas],
 registros: candidate.registros,
 movimentacoes: movements,
@@ -322,6 +327,7 @@ panel.classList.toggle("active", panel.id === tabId);
 function renderSelects() {
 const selectCliente = document.getElementById("select-cliente");
 const selectTipo = document.getElementById("select-tipo");
+const selectItemType = document.getElementById("select-item-type");
 const selectMedida = document.getElementById("select-medida");
 const filterCliente = document.getElementById("filter-cliente");
 const filterTipo = document.getElementById("filter-tipo");
@@ -329,6 +335,7 @@ const movementItem = document.getElementById("mov-item");
 
 const curCliente = selectCliente.value;
 const curTipo = selectTipo.value;
+const curItemType = selectItemType.value;
 const curMedida = selectMedida.value;
 const curFCliente = filterCliente.value;
 const curFTipo = filterTipo.value;
@@ -340,12 +347,29 @@ conferenceTypes.push("Box");
 
 fillSelect(selectCliente, state.clientes, "Selecione o fornecedor/cliente...", curCliente);
 renderConferenceTypeSelect(curTipo);
+renderItemTypeSelect(curItemType);
 fillSelect(selectMedida, state.medidas, "Selecione a medida...", curMedida);
 
 fillSelect(filterCliente, state.clientes, "Todos os fornecedores/clientes", curFCliente);
 fillSelect(filterTipo, conferenceTypes, "Todos os itens", curFTipo);
 updateVolumePreview();
 renderInventorySelects(curMovementItem);
+}
+
+function renderItemTypeSelect(selectedValue = document.getElementById("select-item-type").value) {
+const select = document.getElementById("select-item-type");
+fillSelect(select, state.tipos, "Selecione um tipo de item...", selectedValue);
+
+if (selectedValue && !state.tipos.includes(selectedValue)) {
+const legacyGroup = document.createElement("optgroup");
+legacyGroup.label = "Registro anterior";
+const option = document.createElement("option");
+option.value = selectedValue;
+option.textContent = selectedValue === "Box" ? "Tipo anterior não informado" : selectedValue;
+option.selected = true;
+legacyGroup.appendChild(option);
+select.appendChild(legacyGroup);
+}
 }
 
 function renderConferenceTypeSelect(selectedValue = document.getElementById("select-tipo").value) {
@@ -385,10 +409,16 @@ return selectedValue.startsWith(BOX_MODEL_VALUE_PREFIX)
 : "";
 }
 
-function getConferenceTypeLabel(record) {
-if (record.boxNumber) return `Box ${record.boxNumber}`;
-if (!record.modeloBoxId) return record.tipoItem;
+function getItemTypeLabel(record) {
+if (record.modeloBoxId) {
 return state.modelosBox.find((model) => model.id === record.modeloBoxId)?.nome || record.tipoItem;
+}
+return record.boxNumber && record.tipoItem === "Box" ? "Tipo não informado" : record.tipoItem;
+}
+
+function getConferenceTypeLabel(record) {
+const itemType = getItemTypeLabel(record);
+return record.boxNumber ? `Box ${record.boxNumber} — ${itemType}` : itemType;
 }
 
 function calculateVolumeM3(measure, quantity) {
@@ -601,7 +631,7 @@ medidas: "Nova Medida (ex: 1,10 x 0,07 x 0,019):"
 };
 const selectIds = {
 clientes: "select-cliente",
-tipos: "select-tipo",
+tipos: "select-item-type",
 medidas: "select-medida"
 };
 const novo = prompt(labels[target]);
@@ -655,6 +685,7 @@ e.preventDefault();
 
 const editId = document.getElementById("edit-id").value;
 const selectedType = document.getElementById("select-tipo").value;
+const selectedItemType = document.getElementById("select-item-type").value;
 const boxNumber = getBoxNumber(selectedType);
 const boxModelId = getConferenceBoxModelId(selectedType);
 const boxModel = boxModelId
@@ -669,14 +700,10 @@ if (boxNumber !== null && (!Number.isInteger(totalQuantity) || totalQuantity < 1
 showToast("Informe uma quantidade total válida para o Box.");
 return;
 }
-const legacyType = selectedType.startsWith(LEGACY_TYPE_VALUE_PREFIX)
-? selectedType.slice(LEGACY_TYPE_VALUE_PREFIX.length)
-: selectedType;
-
 const record = {
 id: editId || (boxNumber !== null ? createEntryId("box-record") : String(Date.now())),
 cliente: document.getElementById("select-cliente").value,
-tipoItem: boxNumber !== null || boxModel ? "Box" : legacyType,
+tipoItem: selectedItemType,
 medida: document.getElementById("select-medida").value,
 qtdPacotes: Number(inputPacotes.value) || 0,
 qtdPorPacote: Number(inputUnidPacote.value) || 0,
@@ -703,6 +730,7 @@ renderBoxHistory();
 
 function resetForm() {
 const selectedBoxNumber = getBoxNumber(document.getElementById("select-tipo").value);
+const selectedItemType = document.getElementById("select-item-type").value;
 document.getElementById("edit-id").value = "";
 document.getElementById("form-title").textContent = "Registrar Box";
 document.getElementById("btn-submit").textContent = "Salvar Box";
@@ -710,6 +738,7 @@ document.getElementById("btn-cancel-edit").classList.add("hidden");
 
 document.getElementById("select-tipo").value = "";
 renderConferenceTypeSelect(selectedBoxNumber ? `${BOX_NUMBER_VALUE_PREFIX}${selectedBoxNumber}` : "");
+renderItemTypeSelect(selectedItemType);
 inputPacotes.value = "";
 inputUnidPacote.value = "";
 inputTotal.value = "";
@@ -730,6 +759,7 @@ const records = state.registros
 tbody.innerHTML = records.map((record) => `
 <tr>
 <td><strong>Box ${record.boxNumber}</strong></td>
+<td>${escapeHTML(getItemTypeLabel(record))}</td>
 <td>${formatDateBR(record.dataConferencia)}</td>
 <td>${escapeHTML(record.cliente)}</td>
 <td>${escapeHTML(record.medida)}</td>
@@ -888,6 +918,7 @@ const selectedType = isBoxEntry
 ? `${BOX_MODEL_VALUE_PREFIX}${r.modeloBoxId}`
 : `${LEGACY_TYPE_VALUE_PREFIX}${r.tipoItem}`;
 renderConferenceTypeSelect(selectedType);
+renderItemTypeSelect(r.tipoItem);
 document.getElementById("edit-id").value = r.id;
 document.getElementById("select-cliente").value = r.cliente;
 document.getElementById("select-tipo").value = selectedType;
