@@ -58,6 +58,7 @@ clientes: [...DEFAULT_STATE.clientes],
 tipos: [...DEFAULT_STATE.tipos],
 medidas: [...DEFAULT_STATE.medidas],
 medidasPorTipo: createMeasuresByType(DEFAULT_STATE.tipos, DEFAULT_STATE.medidas),
+medidasPadraoPorTipo: Object.create(null),
 registros: [],
 movimentacoes: [],
 lancamentosFinanceiros: [],
@@ -271,12 +272,29 @@ allMeasures.push(measure);
 });
 });
 
+const defaultMeasuresByType = Object.create(null);
+const sourceDefaults = candidate.medidasPadraoPorTipo;
+if (sourceDefaults !== undefined) {
+if (!sourceDefaults || typeof sourceDefaults !== "object" || Array.isArray(sourceDefaults) ||
+!Object.keys(sourceDefaults).every((type) => typeof sourceDefaults[type] === "string")) {
+throw new Error("As medidas padrão por tipo de item são inválidas.");
+}
+Object.keys(sourceDefaults).forEach((type) => {
+const measure = sourceDefaults[type];
+if (measure && (!measuresByType[type] || !measuresByType[type].includes(measure))) {
+throw new Error(`A medida padrão de "${type}" não está cadastrada para esse tipo.`);
+}
+if (measure) defaultMeasuresByType[type] = measure;
+});
+}
+
 return {
 boxes,
 clientes: candidate.clientes ? [...candidate.clientes] : [...fallback.clientes],
 tipos: types,
 medidas: allMeasures,
 medidasPorTipo: measuresByType,
+medidasPadraoPorTipo: defaultMeasuresByType,
 registros: candidate.registros.map((record) => (
 record.boxNumber !== undefined && record.boxId === undefined
 ? { ...record, boxId: `number-${record.boxNumber}` }
@@ -651,6 +669,15 @@ const date = new Date(`${value}T00:00:00Z`);
 return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
+function parseReceiptDate(value) {
+const text = String(value || "").trim();
+const brMatch = text.match(/^(\d{2})\/?(\d{2})\/?(\d{4})$/);
+const iso = brMatch
+? `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`
+: text;
+return isValidISODate(iso) ? iso : "";
+}
+
 function formatDateBR(iso) {
 if (!iso) return "";
 const [y, m, d] = iso.split("-");
@@ -778,7 +805,7 @@ fillSelect(selectCliente, state.clientes, "", curCliente);
 renderConferenceTypeSelect(curTipo);
 renderBoxNameEditSelect();
 renderItemTypeSelect(curItemType);
-renderMeasureSelect(curItemType, curMedida);
+renderMeasureSelect(curItemType, curMedida || getDefaultMeasureForType(curItemType));
 
 fillSelect(filterCliente, state.clientes, "Todos os clientes", curFCliente);
 fillSelect(filterTipo, conferenceTypes, "Todos os itens", curFTipo);
@@ -802,6 +829,13 @@ select.appendChild(legacyGroup);
 }
 }
 
+function getDefaultMeasureForType(itemType) {
+const configuredMeasure = state.medidasPadraoPorTipo[itemType];
+if (configuredMeasure) return configuredMeasure;
+const measures = state.medidasPorTipo[itemType] || [];
+return measures.length === 1 ? measures[0] : "";
+}
+
 function renderMeasureSelect(itemType, selectedValue = "") {
 const select = document.getElementById("select-medida");
 const measures = itemType ? state.medidasPorTipo[itemType] || [] : [];
@@ -820,7 +854,8 @@ select.appendChild(legacyGroup);
 }
 
 document.getElementById("select-item-type").addEventListener("change", (event) => {
-renderMeasureSelect(event.currentTarget.value);
+const itemType = event.currentTarget.value;
+renderMeasureSelect(itemType, getDefaultMeasureForType(itemType));
 updateVolumePreview();
 });
 
@@ -936,6 +971,23 @@ document.getElementById("input-volume-m3").value = volume === null ? "" : format
 
 document.getElementById("select-medida").addEventListener("change", updateVolumePreview);
 
+const inputReceiptDate = document.getElementById("input-data-recebimento");
+const receiptDatePicker = document.getElementById("input-data-recebimento-picker");
+
+inputReceiptDate.addEventListener("input", () => {
+const receiptDate = parseReceiptDate(inputReceiptDate.value);
+receiptDatePicker.value = receiptDate;
+});
+
+inputReceiptDate.addEventListener("blur", () => {
+const receiptDate = parseReceiptDate(inputReceiptDate.value);
+if (receiptDate) inputReceiptDate.value = formatDateBR(receiptDate);
+});
+
+receiptDatePicker.addEventListener("change", () => {
+inputReceiptDate.value = receiptDatePicker.value ? formatDateBR(receiptDatePicker.value) : "";
+});
+
 function renderInventorySelects(selectedItemId = document.getElementById("mov-item").value) {
 const select = document.getElementById("mov-item");
 select.innerHTML = '<option value="">Selecione um item...</option>';
@@ -992,11 +1044,22 @@ measures.forEach((measure, index) => {
 const item = document.createElement("li");
 const label = document.createElement("span");
 label.textContent = measure;
-const button = document.createElement("button");
-button.type = "button";
-button.className = "btn-del-item";
-button.textContent = "Excluir";
-button.addEventListener("click", () => {
+const actions = document.createElement("div");
+actions.className = "measure-actions";
+const isDefault = state.medidasPadraoPorTipo[itemType] === measure;
+const defaultButton = document.createElement("button");
+defaultButton.type = "button";
+defaultButton.className = "btn-set-default";
+defaultButton.textContent = isDefault ? "Padrão" : "Usar como padrão";
+defaultButton.disabled = isDefault;
+defaultButton.setAttribute("aria-pressed", String(isDefault));
+defaultButton.addEventListener("click", () => setDefaultMeasureForType(itemType, measure));
+
+const deleteButton = document.createElement("button");
+deleteButton.type = "button";
+deleteButton.className = "btn-del-item";
+deleteButton.textContent = "Excluir";
+deleteButton.addEventListener("click", () => {
 if (document.getElementById("select-item-type").value === itemType &&
 document.getElementById("select-medida").value === measure) {
 document.getElementById("select-medida").value = "";
@@ -1006,10 +1069,13 @@ Object.keys(state.medidasPorTipo).forEach((type) => {
 nextMeasuresByType[type] = [...state.medidasPorTipo[type]];
 });
 nextMeasuresByType[itemType].splice(index, 1);
+const nextDefaults = Object.assign(Object.create(null), state.medidasPadraoPorTipo);
+if (nextDefaults[itemType] === measure) delete nextDefaults[itemType];
 const nextState = {
 ...state,
 medidas: [...new Set(Object.values(nextMeasuresByType).flat())],
-medidasPorTipo: nextMeasuresByType
+medidasPorTipo: nextMeasuresByType,
+medidasPadraoPorTipo: nextDefaults
 };
 if (!saveState(nextState)) return;
 state = nextState;
@@ -1017,9 +1083,28 @@ renderSelects();
 renderStandardLists();
 showToast("Medida removida deste tipo de item.");
 });
-item.append(label, button);
+actions.append(defaultButton, deleteButton);
+item.append(label, actions);
 list.appendChild(item);
 });
+}
+
+function setDefaultMeasureForType(itemType, measure) {
+const previousDefault = state.medidasPadraoPorTipo[itemType] || "";
+const nextDefaults = Object.assign(Object.create(null), state.medidasPadraoPorTipo);
+nextDefaults[itemType] = measure;
+const nextState = { ...state, medidasPadraoPorTipo: nextDefaults };
+if (!saveState(nextState)) return;
+state = nextState;
+
+const currentType = document.getElementById("select-item-type").value;
+const currentMeasure = document.getElementById("select-medida").value;
+if (currentType === itemType && (!currentMeasure || currentMeasure === previousDefault)) {
+renderMeasureSelect(itemType, measure);
+updateVolumePreview();
+}
+renderMeasuresByType();
+showToast(`"${measure}" definida como medida padrão para ${itemType}.`);
 }
 
 document.getElementById("select-measure-type").addEventListener("change", renderMeasuresByType);
@@ -1046,8 +1131,15 @@ Object.keys(state.medidasPorTipo).forEach((type) => {
 nextMeasuresByType[type] = [...state.medidasPorTipo[type]];
 });
 nextMeasuresByType[itemType] = [...measures, measure];
+const nextDefaults = Object.assign(Object.create(null), state.medidasPadraoPorTipo);
+if (!nextDefaults[itemType]) nextDefaults[itemType] = measure;
 const allMeasures = [...new Set(Object.values(nextMeasuresByType).flat())];
-const nextState = { ...state, medidas: allMeasures, medidasPorTipo: nextMeasuresByType };
+const nextState = {
+...state,
+medidas: allMeasures,
+medidasPorTipo: nextMeasuresByType,
+medidasPadraoPorTipo: nextDefaults
+};
 if (!saveState(nextState)) return;
 state = nextState;
 input.value = "";
@@ -1268,11 +1360,15 @@ if (measures.some((measure) => measure.toLocaleLowerCase("pt-BR") === clean.toLo
 showToast("Esta medida já está cadastrada para este tipo de item.");
 return;
 }
-const nextMeasuresByType = { ...state.medidasPorTipo, [itemType]: [...measures, clean] };
+const nextMeasuresByType = Object.assign(Object.create(null), state.medidasPorTipo);
+nextMeasuresByType[itemType] = [...measures, clean];
+const nextDefaults = Object.assign(Object.create(null), state.medidasPadraoPorTipo);
+if (!nextDefaults[itemType]) nextDefaults[itemType] = clean;
 const nextState = {
 ...state,
 medidas: [...new Set(Object.values(nextMeasuresByType).flat())],
-medidasPorTipo: nextMeasuresByType
+medidasPorTipo: nextMeasuresByType,
+medidasPadraoPorTipo: nextDefaults
 };
 if (!saveState(nextState)) return;
 state = nextState;
@@ -1399,9 +1495,9 @@ if (selectedBox && (!Number.isInteger(totalQuantity) || totalQuantity < 1)) {
 showToast("Informe uma quantidade total válida para o Box.");
 return;
 }
-const receiptDate = document.getElementById("input-data-recebimento").value;
+const receiptDate = parseReceiptDate(inputReceiptDate.value);
 if (!isValidISODate(receiptDate) || receiptDate > getTodayISO()) {
-showToast("Informe uma data de recebimento válida, que não seja futura.");
+showToast("Informe uma data de chegada válida no formato DD/MM/AAAA, que não seja futura.");
 return;
 }
 const record = {
@@ -1464,8 +1560,9 @@ legacyBoxQuantityWithoutPackages = false;
 totalModeTag.textContent = "Auto";
 totalModeTag.className = "tag-auto";
 document.getElementById("input-data").value = getTodayISO();
-document.getElementById("input-data-recebimento").value = "";
-document.getElementById("input-data-recebimento").max = getTodayISO();
+inputReceiptDate.value = "";
+receiptDatePicker.value = "";
+receiptDatePicker.max = getTodayISO();
 }
 
 function renderBoxHistory() {
@@ -1661,7 +1758,8 @@ inputUnidPacote.readOnly = Boolean(r.qtdLinhasPorPacote && r.qtdColunasPorPacote
 inputTotal.value = r.qtdTotalContada;
 updateVolumePreview();
 document.getElementById("input-data").value = r.dataConferencia;
-document.getElementById("input-data-recebimento").value = r.dataRecebimento || "";
+inputReceiptDate.value = r.dataRecebimento ? formatDateBR(r.dataRecebimento) : "";
+receiptDatePicker.value = r.dataRecebimento || "";
 
 manualTotalOverride = r.qtdTotalContada !== r.qtdPacotes * r.qtdPorPacote;
 legacyBoxQuantityWithoutPackages = isBoxEntry && r.qtdPacotes === 0 && r.qtdPorPacote === 0;
@@ -2002,7 +2100,7 @@ showToast("Modo offline indisponível. Abra pelo endereço HTTPS ou localhost.")
 
 // Init
 document.getElementById("input-data").value = getTodayISO();
-document.getElementById("input-data-recebimento").max = getTodayISO();
+receiptDatePicker.max = getTodayISO();
 document.getElementById("mov-data").value = getTodayISO();
 document.getElementById("valor-data").value = getTodayISO();
 renderSelects();

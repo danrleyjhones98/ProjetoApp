@@ -248,6 +248,16 @@ display: flex;
 gap: 8px;
 }
 
+.date-entry-controls {
+display: grid;
+grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+gap: 8px;
+}
+
+.date-entry-controls input {
+min-width: 0;
+}
+
 .btn-quick-add,
 .btn-box-management {
 min-width: 46px;
@@ -604,6 +614,31 @@ padding: 4px 8px;
 font-size: 0.78rem;
 font-weight: 700;
 cursor: pointer;
+}
+
+.measure-actions {
+display: flex;
+align-items: center;
+gap: 6px;
+flex-shrink: 0;
+}
+
+.btn-set-default {
+min-height: 32px;
+padding: 4px 8px;
+border: 1px solid var(--border);
+border-radius: 6px;
+background: #fff;
+color: var(--primary);
+font-size: 0.78rem;
+font-weight: 700;
+cursor: pointer;
+}
+
+.btn-set-default:disabled {
+background: var(--primary);
+color: #fff;
+cursor: default;
 }
 
 .hidden {

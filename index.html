@@ -12,7 +12,7 @@
     <title>Conferência de Madeiras & Estoque</title>
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="./manifest.json" />
-    <link rel="stylesheet" href="./style.css?v=14" />
+    <link rel="stylesheet" href="./style.css?v=15" />
 </head>
 
 <body>
@@ -152,8 +152,14 @@
 
                     <div class="form-group">
                         <label for="input-data-recebimento">Data de chegada da madeira *</label>
-                        <input type="date" id="input-data-recebimento" required />
-                        <small class="hint">O tempo desde a chegada é calculado automaticamente.</small>
+                        <div class="date-entry-controls">
+                            <input type="text" id="input-data-recebimento" inputmode="numeric" maxlength="10"
+                                placeholder="DD/MM/AAAA" autocomplete="off" required />
+                            <input type="date" id="input-data-recebimento-picker"
+                                aria-label="Selecionar data de chegada no calendário" />
+                        </div>
+                        <small class="hint">Digite a data como DD/MM/AAAA ou selecione pelo calendário. O tempo desde
+                            a chegada é calculado automaticamente.</small>
                     </div>
 
                     <div class="form-group">
@@ -554,6 +560,8 @@
                             <option value=""></option>
                         </select>
                     </div>
+                    <p class="hint">Defina uma medida padrão para cada tipo. Ela será preenchida automaticamente ao
+                        selecionar o tipo no lançamento, mas poderá ser alterada.</p>
                     <form id="form-add-measure" class="add-standard-form">
                         <input type="text" placeholder="Ex: 1,10 x 0,07 x 0,019" required />
                         <button type="submit" class="btn btn-primary btn-sm">Adicionar</button>
@@ -605,7 +613,7 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="./app.js?v=14"></script>
+    <script src="./app.js?v=15"></script>
 </body>
 
 </html>
