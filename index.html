@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#1e3a2f" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Conferência" />
+    <meta name="description" content="Controle prático de conferência de madeiras, pacotes, unidades e clientes." />
+    <title>Conferência de Madeiras & Estoque</title>
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="stylesheet" href="./style.css" />
+</head>
+
+<body>
+    <header class="app-header">
+        <div class="header-content">
+            <div>
+                <h1>Conferência de Madeiras</h1>
+                <p class="subtitle">Conferências, estoque e valores em um só lugar</p>
+            </div>
+            <span id="status-badge" class="badge-offline" title="Dados salvos localmente no aparelho">Salvo no
+                aparelho</span>
+        </div>
+
+        <nav class="tab-bar" role="tablist" aria-label="Navegação principal">
+            <button type="button" class="tab-btn active" data-tab="tab-lancamento" role="tab" aria-selected="true">
+                + Conferência
+            </button>
+            <button type="button" class="tab-btn" data-tab="tab-dashboard" role="tab" aria-selected="false">
+                Dashboard
+            </button>
+            <button type="button" class="tab-btn" data-tab="tab-movimentacoes" role="tab" aria-selected="false">
+                Movimentações
+            </button>
+            <button type="button" class="tab-btn" data-tab="tab-valores" role="tab" aria-selected="false">
+                Valores (R$)
+            </button>
+            <button type="button" class="tab-btn" data-tab="tab-tabela" role="tab" aria-selected="false">
+                Tabela (<span id="badge-count">0</span>)
+            </button>
+            <button type="button" class="tab-btn" data-tab="tab-padroes" role="tab" aria-selected="false">
+                Padrões
+            </button>
+        </nav>
+    </header>
+
+    <main class="container">
+        <!-- ABA 1: LANÇAMENTO / NOVA CONFERÊNCIA -->
+        <section id="tab-lancamento" class="tab-panel active">
+            <div class="card">
+                <div class="card-header">
+                    <h2 id="form-title">Nova Conferência</h2>
+                    <button type="button" id="btn-cancel-edit" class="btn btn-ghost btn-sm hidden">Cancelar
+                        edição</button>
+                </div>
+
+                <form id="form-conferencia" autocomplete="off">
+                    <input type="hidden" id="edit-id" value="" />
+
+                    <div class="form-group">
+                        <label for="select-cliente">Fornecedor / Cliente *</label>
+                        <div class="select-with-add">
+                            <select id="select-cliente" required>
+                                <option value="">Selecione o fornecedor/cliente...</option>
+                            </select>
+                            <button type="button" class="btn-quick-add" data-target="clientes"
+                                title="Adicionar fornecedor/cliente">+</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="select-tipo">Tipo de Item (Madeira) *</label>
+                        <div class="select-with-add">
+                            <select id="select-tipo" required>
+                                <option value="">Selecione o tipo de item...</option>
+                            </select>
+                            <button type="button" class="btn-quick-add" data-target="tipos"
+                                title="Adicionar novo tipo de item">+</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="select-medida">Medida *</label>
+                        <div class="select-with-add">
+                            <select id="select-medida" required>
+                                <option value="">Selecione a medida...</option>
+                            </select>
+                            <button type="button" class="btn-quick-add" data-target="medidas"
+                                title="Adicionar nova medida">+</button>
+                        </div>
+                    </div>
+
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label for="input-pacotes">Qtd. de Pacotes *</label>
+                            <input type="number" id="input-pacotes" inputmode="numeric" min="0" step="1"
+                                placeholder="Ex: 12" required />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="input-unid-pacote">Unid. por Pacote *</label>
+                            <input type="number" id="input-unid-pacote" inputmode="numeric" min="0" step="1"
+                                placeholder="Ex: 50" required />
+                        </div>
+                    </div>
+
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <div class="label-row">
+                                <label for="input-total">Qtd. Total Contada *</label>
+                                <span id="total-mode-tag" class="tag-auto">Auto</span>
+                            </div>
+                            <input type="number" id="input-total" inputmode="numeric" min="0" step="1" placeholder="0"
+                                required />
+                            <small class="hint">Calculado automaticamente (Pacotes × Unid.), mas você pode alterar
+                                manualmente se houver peças avulsas.</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="input-data">Data de Conferência *</label>
+                            <input type="date" id="input-data" required />
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" id="btn-submit" class="btn btn-primary btn-block">
+                            Salvar Conferência
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <section id="tab-dashboard" class="tab-panel">
+            <div class="card">
+                <h2>Dashboard de Estoque</h2>
+                <p class="section-desc">As conferências não alteram o saldo. O estoque é separado por item e unidade; boxes e seus componentes são controlados independentemente.</p>
+            </div>
+
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <span class="kpi-label">Entradas registradas</span>
+                    <strong id="dash-entradas" class="kpi-value">0</strong>
+                    <span class="kpi-caption">movimentações</span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">Saídas registradas</span>
+                    <strong id="dash-saidas" class="kpi-value">0</strong>
+                    <span class="kpi-caption">movimentações</span>
+                </div>
+                <div class="kpi-card highlight">
+                    <span class="kpi-label">Itens com saldo</span>
+                    <strong id="dash-itens" class="kpi-value">0</strong>
+                    <span class="kpi-caption">tipos de item</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>Estoque por item</h3>
+                <div class="table-wrapper">
+                    <table class="excel-table">
+                        <thead>
+                            <tr>
+                                <th>Categoria</th>
+                                <th>Item</th>
+                                <th>Medida / descrição</th>
+                                <th class="num">Entradas</th>
+                                <th class="num">Saídas</th>
+                                <th class="num">Saldo</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-saldo-estoque"></tbody>
+                    </table>
+                </div>
+                <div id="empty-stock" class="empty-state hidden">Cadastre itens em Padrões e registre uma entrada para iniciar o estoque.</div>
+            </div>
+        </section>
+
+        <section id="tab-movimentacoes" class="tab-panel">
+            <div class="card">
+                <div class="card-header">
+                    <h2>Registrar movimentação de estoque</h2>
+                </div>
+                <form id="form-movimentacao" autocomplete="off">
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label for="mov-tipo-operacao">Movimentação *</label>
+                            <select id="mov-tipo-operacao" required>
+                                <option value="entrada">Entrada no estoque</option>
+                                <option value="saida">Saída do estoque</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="mov-item">Item *</label>
+                            <select id="mov-item" required></select>
+                            <small id="mov-unit-hint" class="hint">Cadastre itens em Padrões antes de movimentar o estoque.</small>
+                        </div>
+                    </div>
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label for="mov-quantidade">Quantidade *</label>
+                            <input type="number" id="mov-quantidade" inputmode="decimal" min="0.01" step="any" placeholder="Ex: 50" required />
+                        </div>
+                        <div class="form-group">
+                            <label for="mov-data">Data *</label>
+                            <input type="date" id="mov-data" required />
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="mov-observacao">Observação</label>
+                        <input type="text" id="mov-observacao" maxlength="120" placeholder="Ex: compra, venda ou ajuste" />
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">Salvar movimentação</button>
+                </form>
+            </div>
+
+            <div class="card">
+                <h3>Histórico de movimentações</h3>
+                <div class="table-wrapper">
+                    <table class="excel-table">
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Movimentação</th>
+                                <th>Categoria</th>
+                                <th>Item</th>
+                                <th class="num">Quantidade</th>
+                                <th>Observação</th>
+                                <th class="actions-col">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-movimentacoes"></tbody>
+                    </table>
+                </div>
+                <div id="empty-movements" class="empty-state hidden">Nenhuma movimentação cadastrada.</div>
+            </div>
+        </section>
+
+        <section id="tab-valores" class="tab-panel">
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <span class="kpi-label">Valores recebidos</span>
+                    <strong id="cash-entradas" class="kpi-value">R$ 0,00</strong>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">Valores pagos</span>
+                    <strong id="cash-saidas" class="kpi-value">R$ 0,00</strong>
+                </div>
+                <div class="kpi-card highlight">
+                    <span class="kpi-label">Total disponível</span>
+                    <strong id="cash-saldo" class="kpi-value">R$ 0,00</strong>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Registrar valor</h2>
+                <p class="section-desc">Adicione um recebimento ou registre um pagamento para manter o saldo atualizado.</p>
+                <form id="form-valor" autocomplete="off">
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label for="valor-operacao">Tipo *</label>
+                            <select id="valor-operacao" required>
+                                <option value="entrada">Entrada de valor</option>
+                                <option value="saida">Saída / pagamento</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="valor-quantia">Valor (R$) *</label>
+                            <input type="number" id="valor-quantia" inputmode="decimal" min="0.01" step="0.01" placeholder="Ex: 250,00" required />
+                        </div>
+                    </div>
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label for="valor-data">Data *</label>
+                            <input type="date" id="valor-data" required />
+                        </div>
+                        <div class="form-group">
+                            <label for="valor-descricao">Descrição</label>
+                            <input type="text" id="valor-descricao" maxlength="120" placeholder="Ex: venda, compra ou despesa" />
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">Salvar valor</button>
+                </form>
+            </div>
+
+            <div class="card">
+                <h3>Histórico de valores</h3>
+                <div class="table-wrapper">
+                    <table class="excel-table">
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Tipo</th>
+                                <th>Descrição</th>
+                                <th class="num">Valor</th>
+                                <th class="actions-col">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-valores"></tbody>
+                    </table>
+                </div>
+                <div id="empty-values" class="empty-state hidden">Nenhum valor cadastrado.</div>
+            </div>
+        </section>
+
+        <!-- ABA 2: TABELA ESTILO EXCEL -->
+        <section id="tab-tabela" class="tab-panel">
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <span class="kpi-label">Registros</span>
+                    <strong id="kpi-registros" class="kpi-value">0</strong>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">Fornecedores</span>
+                    <strong id="kpi-fornecedores" class="kpi-value">0</strong>
+                </div>
+                <div class="kpi-card highlight">
+                    <span class="kpi-label">Materiais (tipo + medida)</span>
+                    <strong id="kpi-materiais" class="kpi-value">0</strong>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="toolbar">
+                    <div class="filters-grid">
+                        <select id="filter-cliente" aria-label="Filtrar por fornecedor ou cliente">
+                            <option value="">Todos os fornecedores/clientes</option>
+                        </select>
+                        <select id="filter-tipo" aria-label="Filtrar por tipo de item">
+                            <option value="">Todos os itens</option>
+                        </select>
+                        <input type="date" id="filter-data" aria-label="Filtrar por data" />
+                    </div>
+
+                    <div class="export-bar">
+                        <button type="button" id="btn-clear-filters" class="btn btn-ghost btn-sm">Limpar
+                            filtros</button>
+                        <div class="export-buttons">
+                            <button type="button" id="btn-export-csv" class="btn btn-excel btn-sm">Exportar Excel
+                                (.CSV)</button>
+                            <button type="button" id="btn-export-json" class="btn btn-secondary btn-sm">Backup
+                                JSON</button>
+                            <label for="input-import-json" class="btn btn-secondary btn-sm file-label">Restaurar</label>
+                            <input type="file" id="input-import-json" accept=".json" class="hidden" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="summary-block">
+                    <h3>Total contado por fornecedor e material</h3>
+                    <p class="hint">Cada linha soma somente o mesmo fornecedor, tipo de item e medida, respeitando os filtros aplicados.</p>
+                    <div class="table-wrapper">
+                        <table class="excel-table">
+                            <thead>
+                                <tr>
+                                    <th>Fornecedor / Cliente</th>
+                                    <th>Tipo de Item</th>
+                                    <th>Medida</th>
+                                    <th class="num">Registros</th>
+                                    <th class="num">Total Contado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-resumo-materiais"></tbody>
+                        </table>
+                    </div>
+                    <div id="empty-summary" class="empty-state hidden">Nenhum total para os filtros selecionados.</div>
+                </div>
+
+                <h3 class="records-heading">Registros detalhados</h3>
+                <div class="table-wrapper">
+                    <table class="excel-table" id="tabela-conferencias">
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Fornecedor / Cliente</th>
+                                <th>Tipo de Item</th>
+                                <th>Medida</th>
+                                <th class="num">Pacotes</th>
+                                <th class="num">Unid./Pct</th>
+                                <th class="num">Total Contado</th>
+                                <th class="actions-col">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-conferencias">
+                            <!-- Linhas inseridas via JS -->
+                        </tbody>
+                    </table>
+                </div>
+                <div id="empty-state" class="empty-state hidden">
+                    Nenhum lançamento encontrado. Vá em <strong>+ Conferência</strong> para adicionar o primeiro
+                    registro.
+                </div>
+            </div>
+        </section>
+
+        <!-- ABA 3: CADASTROS PADRÃO -->
+        <section id="tab-padroes" class="tab-panel">
+            <p class="section-desc">
+                Cadastre clientes, padrões da conferência e os itens usados no controle de estoque.
+            </p>
+
+            <div class="standards-grid">
+                <!-- Clientes -->
+                <div class="card">
+                    <h3>Fornecedores / Clientes</h3>
+                    <form class="add-standard-form" data-list="clientes">
+                        <input type="text" placeholder="Nome do fornecedor ou cliente..." required />
+                        <button type="submit" class="btn btn-primary btn-sm">Adicionar</button>
+                    </form>
+                    <ul id="list-clientes" class="standard-list"></ul>
+                </div>
+
+                <!-- Tipos de Item -->
+                <div class="card">
+                    <h3>Tipos de Item (Madeiras)</h3>
+                    <form class="add-standard-form" data-list="tipos">
+                        <input type="text" placeholder="Ex: Régua, Barrote, Linha, Palete..." required />
+                        <button type="submit" class="btn btn-primary btn-sm">Adicionar</button>
+                    </form>
+                    <ul id="list-tipos" class="standard-list"></ul>
+                </div>
+
+                <!-- Medidas -->
+                <div class="card">
+                    <h3>Medidas Padrão</h3>
+                    <form class="add-standard-form" data-list="medidas">
+                        <input type="text" placeholder="Ex: 1,10 x 0,07 x 0,019" required />
+                        <button type="submit" class="btn btn-primary btn-sm">Adicionar</button>
+                    </form>
+                    <ul id="list-medidas" class="standard-list"></ul>
+                </div>
+            </div>
+
+            <div class="inventory-setup-grid">
+                <div class="card">
+                    <h3>Itens do estoque</h3>
+                    <p class="hint inventory-hint">Cadastre madeiras, pregos, pallets e outros itens. Cada cadastro pode ter sua própria medida e unidade.</p>
+                    <form id="form-item-estoque" class="inventory-form" autocomplete="off">
+                        <div class="form-group">
+                            <label for="item-nome">Nome do item *</label>
+                            <input type="text" id="item-nome" maxlength="80" placeholder="Ex: Régua, prego 18x27, pallet" required />
+                        </div>
+                        <div class="grid-2">
+                            <div class="form-group">
+                                <label for="item-categoria">Categoria *</label>
+                                <select id="item-categoria" required>
+                                    <option value="madeira">Madeira</option>
+                                    <option value="pregos">Pregos</option>
+                                    <option value="pallet">Pallet</option>
+                                    <option value="box">Box</option>
+                                    <option value="outro">Outro</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="item-unidade">Unidade de contagem *</label>
+                                <input type="text" id="item-unidade" maxlength="20" placeholder="Ex: peça, kg, pallet" required />
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="item-medida">Medida / descrição</label>
+                            <input type="text" id="item-medida" maxlength="80" placeholder="Ex: 1,10 x 0,07 x 0,019" />
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-block">Adicionar item</button>
+                    </form>
+                    <ul id="list-itens-estoque" class="standard-list inventory-list"></ul>
+                </div>
+
+                <div class="card">
+                    <h3>Modelos de box</h3>
+                    <p class="hint inventory-hint">Defina os componentes de cada modelo para consulta. Movimentar um box não altera automaticamente o saldo dos componentes.</p>
+                    <form id="form-modelo-box" class="inventory-form" autocomplete="off">
+                        <div class="grid-2">
+                            <div class="form-group">
+                                <label for="box-nome">Nome do modelo *</label>
+                                <input type="text" id="box-nome" maxlength="80" placeholder="Ex: Box exportação A" required />
+                            </div>
+                            <div class="form-group">
+                                <label for="box-unidade">Unidade do box *</label>
+                                <input type="text" id="box-unidade" maxlength="20" value="box" required />
+                            </div>
+                        </div>
+                        <div class="label-row">
+                            <label>Componentes por box</label>
+                            <button type="button" id="btn-add-box-component" class="btn btn-secondary btn-sm">Adicionar componente</button>
+                        </div>
+                        <div id="box-component-list" class="box-component-list"></div>
+                        <button type="submit" class="btn btn-primary btn-block">Salvar modelo de box</button>
+                    </form>
+                    <ul id="list-modelos-box" class="standard-list inventory-list"></ul>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="./app.js"></script>
+</body>
+
+</html>

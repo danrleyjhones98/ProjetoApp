@@ -1,0 +1,1189 @@
+const STORAGE_KEY = "conferencia_madeiras_v1";
+
+const DEFAULT_STATE = {
+clientes: [
+"Cliente Padrão",
+"Construtora Litoral",
+"Depósito Central"
+],
+tipos: [
+"Régua",
+"Barrote",
+"Linha Mista",
+"Palete PBR",
+"Tábua"
+],
+medidas: [
+"1,10 x 0,07 x 0,019",
+"0,80 x 0,07 x 0,019",
+"5,0 x 9,0 x 1,0",
+"1,20 x 1,00"
+],
+registros: [],
+movimentacoes: [],
+lancamentosFinanceiros: [],
+itensEstoque: [],
+modelosBox: []
+};
+
+let state = loadState();
+let manualTotalOverride = false;
+
+function createDefaultState() {
+return {
+clientes: [...DEFAULT_STATE.clientes],
+tipos: [...DEFAULT_STATE.tipos],
+medidas: [...DEFAULT_STATE.medidas],
+registros: [],
+movimentacoes: [],
+lancamentosFinanceiros: [],
+itensEstoque: [],
+modelosBox: []
+};
+}
+
+function loadState() {
+let raw;
+try {
+raw = localStorage.getItem(STORAGE_KEY);
+} catch (error) {
+console.error("Não foi possível ler os dados locais.", error);
+showToast("Não foi possível acessar o armazenamento local deste navegador.");
+return createDefaultState();
+}
+if (!raw) return createDefaultState();
+
+try {
+return normalizeState(JSON.parse(raw), DEFAULT_STATE);
+} catch (error) {
+console.error("Os dados locais não puderam ser carregados.", error);
+showToast("Os dados locais estão inválidos. Use um backup para restaurá-los.");
+return createDefaultState();
+}
+}
+
+function normalizeState(candidate, fallback) {
+if (!candidate || typeof candidate !== "object" || !Array.isArray(candidate.registros)) {
+throw new Error("O backup não contém uma lista de registros válida.");
+}
+
+const listKeys = ["clientes", "tipos", "medidas"];
+for (const key of listKeys) {
+if (candidate[key] !== undefined &&
+(!Array.isArray(candidate[key]) || !candidate[key].every((item) => typeof item === "string"))) {
+throw new Error(`A lista "${key}" é inválida.`);
+}
+}
+
+const validRecords = candidate.registros.every((record) =>
+record &&
+typeof record === "object" &&
+typeof record.id === "string" &&
+typeof record.cliente === "string" &&
+typeof record.tipoItem === "string" &&
+typeof record.medida === "string" &&
+typeof record.dataConferencia === "string" &&
+Number.isFinite(Number(record.qtdPacotes)) &&
+Number.isFinite(Number(record.qtdPorPacote)) &&
+Number.isFinite(Number(record.qtdTotalContada)) &&
+Number(record.qtdPacotes) >= 0 &&
+Number(record.qtdPorPacote) >= 0 &&
+Number(record.qtdTotalContada) >= 0
+);
+if (!validRecords) throw new Error("Um ou mais registros do backup são inválidos.");
+
+const inventoryItems = candidate.itensEstoque === undefined ? [] : candidate.itensEstoque;
+if (!Array.isArray(inventoryItems) || !inventoryItems.every((item) =>
+item &&
+typeof item.id === "string" &&
+typeof item.nome === "string" &&
+["madeira", "pregos", "pallet", "box", "outro"].includes(item.categoria) &&
+typeof item.unidade === "string" &&
+item.unidade.trim() !== "" &&
+typeof item.medida === "string"
+)) {
+throw new Error("Um ou mais itens de estoque são inválidos.");
+}
+const itemIds = new Set(inventoryItems.map((item) => item.id));
+if (itemIds.size !== inventoryItems.length) throw new Error("Há itens de estoque com identificadores repetidos.");
+
+const boxModels = candidate.modelosBox === undefined ? [] : candidate.modelosBox;
+if (!Array.isArray(boxModels) || !boxModels.every((model) =>
+model &&
+typeof model.id === "string" &&
+typeof model.nome === "string" &&
+typeof model.itemId === "string" &&
+itemIds.has(model.itemId) &&
+inventoryItems.find((item) => item.id === model.itemId).categoria === "box" &&
+Array.isArray(model.componentes) &&
+model.componentes.length > 0 &&
+model.componentes.every((component) =>
+component &&
+typeof component.itemId === "string" &&
+itemIds.has(component.itemId) &&
+inventoryItems.find((item) => item.id === component.itemId).categoria !== "box" &&
+Number.isFinite(Number(component.quantidade)) &&
+Number(component.quantidade) > 0
+)
+)) {
+throw new Error("Um ou mais modelos de box são inválidos.");
+}
+
+const movements = candidate.movimentacoes === undefined ? [] : candidate.movimentacoes;
+if (!Array.isArray(movements) || !movements.every((movement) =>
+movement &&
+typeof movement.id === "string" &&
+["entrada", "saida"].includes(movement.operacao) &&
+typeof movement.itemId === "string" &&
+itemIds.has(movement.itemId) &&
+Number.isFinite(Number(movement.quantidade)) &&
+Number(movement.quantidade) > 0 &&
+typeof movement.data === "string" &&
+typeof movement.observacao === "string"
+)) {
+throw new Error("Uma ou mais movimentações de madeira são inválidas.");
+}
+
+const stockBalances = new Map();
+movements.forEach((movement) => {
+const direction = movement.operacao === "entrada" ? 1 : -1;
+stockBalances.set(movement.itemId, (stockBalances.get(movement.itemId) || 0) + direction * Number(movement.quantidade));
+});
+if ([...stockBalances.values()].some((balance) => balance < 0)) {
+throw new Error("O backup contém saídas maiores que as entradas de madeira.");
+}
+
+const financialEntries = candidate.lancamentosFinanceiros === undefined
+? []
+: candidate.lancamentosFinanceiros;
+if (!Array.isArray(financialEntries) || !financialEntries.every((entry) =>
+entry &&
+typeof entry.id === "string" &&
+["entrada", "saida"].includes(entry.operacao) &&
+Number.isFinite(Number(entry.valor)) &&
+Number(entry.valor) > 0 &&
+typeof entry.data === "string" &&
+typeof entry.descricao === "string"
+)) {
+throw new Error("Um ou mais lançamentos financeiros são inválidos.");
+}
+const cashBalanceInCents = financialEntries.reduce((balance, entry) =>
+balance + (entry.operacao === "entrada" ? 1 : -1) * Math.round(Number(entry.valor) * 100), 0);
+if (cashBalanceInCents < 0) throw new Error("O backup contém saídas maiores que as entradas financeiras.");
+
+return {
+clientes: candidate.clientes ? [...candidate.clientes] : [...fallback.clientes],
+tipos: candidate.tipos ? [...candidate.tipos] : [...fallback.tipos],
+medidas: candidate.medidas ? [...candidate.medidas] : [...fallback.medidas],
+registros: candidate.registros,
+movimentacoes: movements,
+lancamentosFinanceiros: financialEntries,
+itensEstoque: inventoryItems,
+modelosBox: boxModels
+};
+}
+
+function saveState(nextState = state) {
+try {
+localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+return true;
+} catch (error) {
+console.error("Não foi possível salvar os dados locais.", error);
+showToast("Não foi possível salvar. Verifique o espaço e as permissões do navegador.");
+return false;
+}
+}
+
+function showToast(msg) {
+const toast = document.getElementById("toast");
+toast.textContent = msg;
+toast.classList.add("show");
+clearTimeout(toast._timer);
+toast._timer = setTimeout(() => toast.classList.remove("show"), 2600);
+}
+
+function getTodayISO() {
+const now = new Date();
+const offset = now.getTimezoneOffset() * 60000;
+return new Date(now - offset).toISOString().split("T")[0];
+}
+
+function formatDateBR(iso) {
+if (!iso) return "";
+const [y, m, d] = iso.split("-");
+return `${d}/${m}/${y}`;
+}
+
+function formatNumber(n) {
+return Number(n || 0).toLocaleString("pt-BR");
+}
+
+function formatQuantity(n) {
+return Number(n || 0).toLocaleString("pt-BR", { maximumFractionDigits: 4 });
+}
+
+function getInventoryItem(id) {
+return state.itensEstoque.find((item) => item.id === id);
+}
+
+function getInventoryLabel(item) {
+if (!item) return "Item removido";
+return [item.nome, item.medida].filter(Boolean).join(" — ");
+}
+
+function getCategoryLabel(category) {
+const labels = {
+madeira: "Madeira",
+pregos: "Pregos",
+pallet: "Pallet",
+box: "Box",
+outro: "Outro"
+};
+return labels[category] || category;
+}
+
+function formatCurrency(value) {
+return Number(value || 0).toLocaleString("pt-BR", {
+style: "currency",
+currency: "BRL"
+});
+}
+
+function getCashBalanceInCents(entries = state.lancamentosFinanceiros) {
+return entries.reduce((balance, entry) =>
+balance + (entry.operacao === "entrada" ? 1 : -1) * Math.round(Number(entry.valor) * 100), 0);
+}
+
+function getItemBalance(itemId, movements = state.movimentacoes) {
+return movements.reduce((balance, movement) => {
+if (movement.itemId !== itemId) return balance;
+return balance + (movement.operacao === "entrada" ? 1 : -1) * Number(movement.quantidade);
+}, 0);
+}
+
+function getStockSummary() {
+const summary = new Map(state.itensEstoque.map((item) => [item.id, {
+...item,
+entradas: 0,
+saidas: 0
+}]));
+state.movimentacoes.forEach((movement) => {
+const row = summary.get(movement.itemId);
+if (!row) return;
+if (movement.operacao === "entrada") row.entradas += Number(movement.quantidade);
+else row.saidas += Number(movement.quantidade);
+});
+return [...summary.values()].sort((a, b) =>
+a.categoria.localeCompare(b.categoria, "pt-BR") || a.nome.localeCompare(b.nome, "pt-BR"));
+}
+
+// Tabs
+document.querySelectorAll(".tab-btn").forEach((btn) => {
+btn.addEventListener("click", () => {
+switchTab(btn.dataset.tab);
+});
+});
+
+function switchTab(tabId) {
+document.querySelectorAll(".tab-btn").forEach((b) => {
+const active = b.dataset.tab === tabId;
+b.classList.toggle("active", active);
+b.setAttribute("aria-selected", active ? "true" : "false");
+});
+document.querySelectorAll(".tab-panel").forEach((panel) => {
+panel.classList.toggle("active", panel.id === tabId);
+});
+}
+
+// Populate Selects & Lists
+function renderSelects() {
+const selectCliente = document.getElementById("select-cliente");
+const selectTipo = document.getElementById("select-tipo");
+const selectMedida = document.getElementById("select-medida");
+const filterCliente = document.getElementById("filter-cliente");
+const filterTipo = document.getElementById("filter-tipo");
+const movementItem = document.getElementById("mov-item");
+
+const curCliente = selectCliente.value;
+const curTipo = selectTipo.value;
+const curMedida = selectMedida.value;
+const curFCliente = filterCliente.value;
+const curFTipo = filterTipo.value;
+const curMovementItem = movementItem.value;
+
+fillSelect(selectCliente, state.clientes, "Selecione o fornecedor/cliente...", curCliente);
+fillSelect(selectTipo, state.tipos, "Selecione o tipo de item...", curTipo);
+fillSelect(selectMedida, state.medidas, "Selecione a medida...", curMedida);
+
+fillSelect(filterCliente, state.clientes, "Todos os fornecedores/clientes", curFCliente);
+fillSelect(filterTipo, state.tipos, "Todos os itens", curFTipo);
+renderInventorySelects(curMovementItem);
+}
+
+function renderInventorySelects(selectedItemId = document.getElementById("mov-item").value) {
+const select = document.getElementById("mov-item");
+select.innerHTML = '<option value="">Selecione um item...</option>';
+state.itensEstoque.forEach((item) => {
+const option = document.createElement("option");
+option.value = item.id;
+option.textContent = `${getCategoryLabel(item.categoria)} — ${getInventoryLabel(item)} (${item.unidade})`;
+option.selected = item.id === selectedItemId;
+select.appendChild(option);
+});
+updateMovementUnitHint();
+}
+
+function updateMovementUnitHint() {
+const item = getInventoryItem(document.getElementById("mov-item").value);
+document.getElementById("mov-unit-hint").textContent = item
+? `Quantidade em ${item.unidade}.`
+: state.itensEstoque.length
+? "Selecione o item para ver sua unidade de contagem."
+: "Cadastre itens em Padrões antes de movimentar o estoque.";
+}
+
+function fillSelect(selectEl, items, placeholder, selectedValue) {
+selectEl.innerHTML = `<option value="">${placeholder}</option>`;
+items.forEach((item) => {
+const opt = document.createElement("option");
+opt.value = item;
+opt.textContent = item;
+if (item === selectedValue) opt.selected = true;
+selectEl.appendChild(opt);
+});
+}
+
+function renderStandardLists() {
+renderList("clientes", "list-clientes");
+renderList("tipos", "list-tipos");
+renderList("medidas", "list-medidas");
+renderInventoryItems();
+renderBoxModels();
+}
+
+function renderList(key, ulId) {
+const ul = document.getElementById(ulId);
+ul.innerHTML = "";
+if (state[key].length === 0) {
+ul.innerHTML = `<li style="color:#6b7280;font-size:0.84rem;">Nenhum item cadastrado.</li>`;
+return;
+}
+state[key].forEach((item, index) => {
+const li = document.createElement("li");
+const span = document.createElement("span");
+span.textContent = item;
+
+const btn = document.createElement("button");
+btn.type = "button";
+btn.className = "btn-del-item";
+btn.textContent = "Excluir";
+btn.addEventListener("click", () => {
+state[key].splice(index, 1);
+saveState();
+renderSelects();
+renderStandardLists();
+showToast("Item padrão removido.");
+});
+
+li.appendChild(span);
+li.appendChild(btn);
+ul.appendChild(li);
+});
+}
+
+function renderInventoryItems() {
+const list = document.getElementById("list-itens-estoque");
+list.innerHTML = "";
+if (state.itensEstoque.length === 0) {
+list.innerHTML = '<li class="list-empty">Nenhum item de estoque cadastrado.</li>';
+} else {
+state.itensEstoque.forEach((item) => {
+const li = document.createElement("li");
+const description = document.createElement("span");
+description.textContent = `${getCategoryLabel(item.categoria)} · ${getInventoryLabel(item)} (${item.unidade})`;
+
+const button = document.createElement("button");
+button.type = "button";
+button.className = "btn-del-item";
+button.textContent = "Excluir";
+button.addEventListener("click", () => deleteInventoryItem(item.id));
+li.append(description, button);
+list.appendChild(li);
+});
+}
+
+renderInventorySelects();
+renderBoxComponentOptions();
+}
+
+function renderBoxModels() {
+const list = document.getElementById("list-modelos-box");
+list.innerHTML = "";
+if (state.modelosBox.length === 0) {
+list.innerHTML = '<li class="list-empty">Nenhum modelo de box cadastrado.</li>';
+return;
+}
+
+state.modelosBox.forEach((model) => {
+const boxItem = getInventoryItem(model.itemId);
+const li = document.createElement("li");
+li.className = "box-model-list-item";
+const content = document.createElement("div");
+const title = document.createElement("strong");
+title.textContent = `${model.nome} (${boxItem ? boxItem.unidade : "box"})`;
+const components = document.createElement("ul");
+components.className = "box-model-components";
+model.componentes.forEach((component) => {
+const item = getInventoryItem(component.itemId);
+const componentLine = document.createElement("li");
+componentLine.textContent = `${getCategoryLabel(item ? item.categoria : "outro")} · ${getInventoryLabel(item)} — ${formatQuantity(component.quantidade)} ${item ? item.unidade : ""}`;
+components.appendChild(componentLine);
+});
+content.append(title, components);
+
+const button = document.createElement("button");
+button.type = "button";
+button.className = "btn-del-item";
+button.textContent = "Excluir";
+button.addEventListener("click", () => deleteBoxModel(model.id));
+li.append(content, button);
+list.appendChild(li);
+});
+}
+
+function renderBoxComponentOptions() {
+document.querySelectorAll(".box-component-item").forEach((select) => {
+const selectedId = select.value;
+select.innerHTML = '<option value="">Selecione um componente...</option>';
+state.itensEstoque.filter((item) => item.categoria !== "box").forEach((item) => {
+const option = document.createElement("option");
+option.value = item.id;
+option.textContent = `${getCategoryLabel(item.categoria)} · ${getInventoryLabel(item)} (${item.unidade})`;
+option.selected = item.id === selectedId;
+select.appendChild(option);
+});
+});
+}
+
+function addBoxComponentRow() {
+const row = document.createElement("div");
+row.className = "box-component-row";
+
+const select = document.createElement("select");
+select.className = "box-component-item";
+select.setAttribute("aria-label", "Componente do modelo");
+select.required = true;
+
+const quantity = document.createElement("input");
+quantity.type = "number";
+quantity.className = "box-component-quantity";
+quantity.inputMode = "decimal";
+quantity.min = "0.01";
+quantity.step = "any";
+quantity.placeholder = "Qtd.";
+quantity.setAttribute("aria-label", "Quantidade do componente");
+quantity.required = true;
+
+const remove = document.createElement("button");
+remove.type = "button";
+remove.className = "btn-del-item";
+remove.textContent = "Remover";
+remove.addEventListener("click", () => row.remove());
+
+row.append(select, quantity, remove);
+document.getElementById("box-component-list").appendChild(row);
+renderBoxComponentOptions();
+}
+
+function deleteInventoryItem(id) {
+if (state.modelosBox.some((model) => model.itemId === id)) {
+showToast("Exclua o modelo de box vinculado antes de remover este item.");
+return;
+}
+if (state.movimentacoes.some((movement) => movement.itemId === id)) {
+showToast("Este item tem movimentações no histórico e não pode ser excluído.");
+return;
+}
+if (state.modelosBox.some((model) => model.componentes.some((component) => component.itemId === id))) {
+showToast("Este item faz parte de um modelo de box e não pode ser excluído.");
+return;
+}
+if (!window.confirm("Excluir este item do cadastro de estoque?")) return;
+
+const items = state.itensEstoque.filter((item) => item.id !== id);
+if (!saveState({ ...state, itensEstoque: items })) return;
+state.itensEstoque = items;
+renderInventoryItems();
+renderDashboard();
+showToast("Item de estoque excluído.");
+}
+
+function deleteBoxModel(id) {
+const model = state.modelosBox.find((entry) => entry.id === id);
+if (!model) return;
+if (state.movimentacoes.some((movement) => movement.itemId === model.itemId)) {
+showToast("Este modelo tem movimentações no histórico e não pode ser excluído.");
+return;
+}
+if (!window.confirm("Excluir este modelo de box e seu item do estoque?")) return;
+
+const models = state.modelosBox.filter((entry) => entry.id !== id);
+const items = state.itensEstoque.filter((item) => item.id !== model.itemId);
+if (!saveState({ ...state, modelosBox: models, itensEstoque: items })) return;
+state.modelosBox = models;
+state.itensEstoque = items;
+renderInventoryItems();
+renderBoxModels();
+renderDashboard();
+showToast("Modelo de box excluído.");
+}
+
+document.getElementById("form-item-estoque").addEventListener("submit", (event) => {
+event.preventDefault();
+const item = {
+id: createEntryId("item"),
+nome: document.getElementById("item-nome").value.trim(),
+categoria: document.getElementById("item-categoria").value,
+unidade: document.getElementById("item-unidade").value.trim(),
+medida: document.getElementById("item-medida").value.trim()
+};
+const duplicate = state.itensEstoque.some((existing) =>
+existing.nome.toLocaleLowerCase() === item.nome.toLocaleLowerCase() &&
+existing.categoria === item.categoria &&
+existing.medida.toLocaleLowerCase() === item.medida.toLocaleLowerCase() &&
+existing.unidade.toLocaleLowerCase() === item.unidade.toLocaleLowerCase()
+);
+if (duplicate) {
+showToast("Este item já está cadastrado.");
+return;
+}
+
+const items = [...state.itensEstoque, item];
+if (!saveState({ ...state, itensEstoque: items })) return;
+state.itensEstoque = items;
+event.currentTarget.reset();
+renderInventoryItems();
+renderDashboard();
+showToast("Item de estoque cadastrado.");
+});
+
+document.getElementById("btn-add-box-component").addEventListener("click", addBoxComponentRow);
+
+document.getElementById("form-modelo-box").addEventListener("submit", (event) => {
+event.preventDefault();
+const name = document.getElementById("box-nome").value.trim();
+if (state.modelosBox.some((model) => model.nome.toLocaleLowerCase() === name.toLocaleLowerCase())) {
+showToast("Já existe um modelo de box com esse nome.");
+return;
+}
+
+const rows = [...document.querySelectorAll(".box-component-row")];
+if (rows.length === 0) {
+showToast("Adicione ao menos um componente para o modelo.");
+return;
+}
+
+const componentes = rows.map((row) => ({
+itemId: row.querySelector(".box-component-item").value,
+quantidade: Number(row.querySelector(".box-component-quantity").value)
+}));
+if (componentes.some((component) => !component.itemId || !Number.isFinite(component.quantidade) || component.quantidade <= 0)) {
+showToast("Informe um item e uma quantidade válida para cada componente.");
+return;
+}
+
+const itemId = createEntryId("box");
+const boxItem = {
+id: itemId,
+nome: name,
+categoria: "box",
+unidade: document.getElementById("box-unidade").value.trim(),
+medida: ""
+};
+const model = { id: itemId, nome: name, itemId, componentes };
+const items = [...state.itensEstoque, boxItem];
+const models = [...state.modelosBox, model];
+if (!saveState({ ...state, itensEstoque: items, modelosBox: models })) return;
+state.itensEstoque = items;
+state.modelosBox = models;
+event.currentTarget.reset();
+document.getElementById("box-unidade").value = "box";
+document.getElementById("box-component-list").innerHTML = "";
+addBoxComponentRow();
+renderInventoryItems();
+renderBoxModels();
+renderDashboard();
+showToast("Modelo de box cadastrado; seus componentes terão estoque independente.");
+});
+
+// Add Standard Forms
+document.querySelectorAll(".add-standard-form").forEach((form) => {
+form.addEventListener("submit", (e) => {
+e.preventDefault();
+const listKey = form.dataset.list;
+const input = form.querySelector("input");
+const val = input.value.trim();
+if (!val) return;
+
+if (!state[listKey].some((x) => x.toLowerCase() === val.toLowerCase())) {
+state[listKey].push(val);
+saveState();
+renderSelects();
+renderStandardLists();
+showToast(`"${val}" adicionado aos padrões!`);
+} else {
+showToast("Este item já está cadastrado.");
+}
+input.value = "";
+});
+});
+
+// Quick "+" button next to selects
+document.querySelectorAll(".btn-quick-add").forEach((btn) => {
+btn.addEventListener("click", () => {
+const target = btn.dataset.target;
+const labels = {
+clientes: "Novo Fornecedor/Cliente:",
+tipos: "Novo Tipo de Item (Madeira):",
+medidas: "Nova Medida (ex: 1,10 x 0,07 x 0,019):"
+};
+const selectIds = {
+clientes: "select-cliente",
+tipos: "select-tipo",
+medidas: "select-medida"
+};
+const novo = prompt(labels[target]);
+if (!novo || !novo.trim()) return;
+const clean = novo.trim();
+if (!state[target].some((x) => x.toLowerCase() === clean.toLowerCase())) {
+state[target].push(clean);
+saveState();
+renderSelects();
+renderStandardLists();
+}
+document.getElementById(selectIds[target]).value = clean;
+showToast(`"${clean}" selecionado!`);
+});
+});
+
+// Auto-calculate total units
+const inputPacotes = document.getElementById("input-pacotes");
+const inputUnidPacote = document.getElementById("input-unid-pacote");
+const inputTotal = document.getElementById("input-total");
+const totalModeTag = document.getElementById("total-mode-tag");
+
+function updateAutoTotal() {
+if (manualTotalOverride) return;
+const p = Number(inputPacotes.value) || 0;
+const u = Number(inputUnidPacote.value) || 0;
+inputTotal.value = p * u > 0 ? p * u : "";
+totalModeTag.textContent = "Auto";
+totalModeTag.className = "tag-auto";
+}
+
+inputPacotes.addEventListener("input", updateAutoTotal);
+inputUnidPacote.addEventListener("input", updateAutoTotal);
+
+inputTotal.addEventListener("input", () => {
+manualTotalOverride = true;
+totalModeTag.textContent = "Manual";
+totalModeTag.className = "tag-manual";
+});
+
+// Save or Update Conferência
+const formConferencia = document.getElementById("form-conferencia");
+formConferencia.addEventListener("submit", (e) => {
+e.preventDefault();
+
+const editId = document.getElementById("edit-id").value;
+const record = {
+id: editId || String(Date.now()),
+cliente: document.getElementById("select-cliente").value,
+tipoItem: document.getElementById("select-tipo").value,
+medida: document.getElementById("select-medida").value,
+qtdPacotes: Number(inputPacotes.value) || 0,
+qtdPorPacote: Number(inputUnidPacote.value) || 0,
+qtdTotalContada: Number(inputTotal.value) || 0,
+dataConferencia: document.getElementById("input-data").value
+};
+
+if (editId) {
+const idx = state.registros.findIndex((r) => r.id === editId);
+if (idx !== -1) state.registros[idx] = record;
+showToast("Conferência atualizada!");
+} else {
+state.registros.unshift(record);
+showToast("Conferência salva com sucesso!");
+}
+
+saveState();
+resetForm();
+renderTable();
+});
+
+function resetForm() {
+document.getElementById("edit-id").value = "";
+document.getElementById("form-title").textContent = "Nova Conferência";
+document.getElementById("btn-submit").textContent = "Salvar Conferência";
+document.getElementById("btn-cancel-edit").classList.add("hidden");
+
+inputPacotes.value = "";
+inputUnidPacote.value = "";
+inputTotal.value = "";
+manualTotalOverride = false;
+totalModeTag.textContent = "Auto";
+totalModeTag.className = "tag-auto";
+document.getElementById("input-data").value = getTodayISO();
+}
+
+document.getElementById("btn-cancel-edit").addEventListener("click", resetForm);
+
+// Render Excel-like Table & KPIs
+function getFilteredRecords() {
+const fCliente = document.getElementById("filter-cliente").value;
+const fTipo = document.getElementById("filter-tipo").value;
+const fData = document.getElementById("filter-data").value;
+
+return state.registros.filter((r) => {
+if (fCliente && r.cliente !== fCliente) return false;
+if (fTipo && r.tipoItem !== fTipo) return false;
+if (fData && r.dataConferencia !== fData) return false;
+return true;
+});
+}
+
+function getMaterialTotals(records) {
+const totals = new Map();
+records.forEach((record) => {
+const key = JSON.stringify([record.cliente, record.tipoItem, record.medida]);
+if (!totals.has(key)) {
+totals.set(key, {
+fornecedor: record.cliente,
+tipoItem: record.tipoItem,
+medida: record.medida,
+registros: 0,
+totalContado: 0
+});
+}
+
+const group = totals.get(key);
+group.registros += 1;
+group.totalContado += Number(record.qtdTotalContada || 0);
+});
+
+return [...totals.values()].sort((a, b) =>
+a.fornecedor.localeCompare(b.fornecedor, "pt-BR") ||
+a.tipoItem.localeCompare(b.tipoItem, "pt-BR") ||
+a.medida.localeCompare(b.medida, "pt-BR"));
+}
+
+function renderTable() {
+const tbody = document.getElementById("tbody-conferencias");
+const emptyState = document.getElementById("empty-state");
+const filtered = getFilteredRecords();
+const materialTotals = getMaterialTotals(filtered);
+
+document.getElementById("badge-count").textContent = state.registros.length;
+tbody.innerHTML = "";
+
+filtered.forEach((r) => {
+const tr = document.createElement("tr");
+tr.innerHTML = `
+<td>${formatDateBR(r.dataConferencia)}</td>
+<td><strong>${escapeHTML(r.cliente)}</strong></td>
+<td>${escapeHTML(r.tipoItem)}</td>
+<td>${escapeHTML(r.medida)}</td>
+<td class="num">${formatNumber(r.qtdPacotes)}</td>
+<td class="num">${formatNumber(r.qtdPorPacote)}</td>
+<td class="num"><strong>${formatNumber(r.qtdTotalContada)}</strong></td>
+<td class="actions-col">
+    <div class="row-actions">
+        <button type="button" class="btn-icon edit" data-id="${escapeHTML(r.id)}">Editar</button>
+        <button type="button" class="btn-icon delete" data-id="${escapeHTML(r.id)}">Excluir</button>
+    </div>
+</td>
+`;
+tbody.appendChild(tr);
+});
+
+const suppliers = new Set(filtered.map((record) => record.cliente));
+const materials = new Set(filtered.map((record) => JSON.stringify([record.tipoItem, record.medida])));
+document.getElementById("kpi-registros").textContent = formatNumber(filtered.length);
+document.getElementById("kpi-fornecedores").textContent = formatNumber(suppliers.size);
+document.getElementById("kpi-materiais").textContent = formatNumber(materials.size);
+
+const summaryBody = document.getElementById("tbody-resumo-materiais");
+summaryBody.innerHTML = materialTotals.map((group) => `
+<tr>
+<td><strong>${escapeHTML(group.fornecedor)}</strong></td>
+<td>${escapeHTML(group.tipoItem)}</td>
+<td>${escapeHTML(group.medida)}</td>
+<td class="num">${formatNumber(group.registros)}</td>
+<td class="num"><strong>${formatNumber(group.totalContado)}</strong></td>
+</tr>
+`).join("");
+document.getElementById("empty-summary").classList.toggle("hidden", materialTotals.length > 0);
+
+emptyState.classList.toggle("hidden", filtered.length > 0);
+
+// Bind Edit & Delete
+tbody.querySelectorAll(".btn-icon.edit").forEach((btn) => {
+btn.addEventListener("click", () => startEdit(btn.dataset.id));
+});
+tbody.querySelectorAll(".btn-icon.delete").forEach((btn) => {
+btn.addEventListener("click", () => deleteRecord(btn.dataset.id));
+});
+}
+
+function escapeHTML(str) {
+return String(str || "")
+.replace(/&/g, "&amp;")
+.replace(/</g, "&lt;")
+.replace(/>/g, "&gt;")
+.replace(/"/g, "&quot;");
+}
+
+function startEdit(id) {
+const r = state.registros.find((item) => item.id === id);
+if (!r) return;
+
+document.getElementById("edit-id").value = r.id;
+document.getElementById("select-cliente").value = r.cliente;
+document.getElementById("select-tipo").value = r.tipoItem;
+document.getElementById("select-medida").value = r.medida;
+inputPacotes.value = r.qtdPacotes;
+inputUnidPacote.value = r.qtdPorPacote;
+inputTotal.value = r.qtdTotalContada;
+document.getElementById("input-data").value = r.dataConferencia;
+
+manualTotalOverride = r.qtdTotalContada !== r.qtdPacotes * r.qtdPorPacote;
+totalModeTag.textContent = manualTotalOverride ? "Manual" : "Auto";
+totalModeTag.className = manualTotalOverride ? "tag-manual" : "tag-auto";
+
+document.getElementById("form-title").textContent = "Editando Conferência";
+document.getElementById("btn-submit").textContent = "Atualizar Conferência";
+document.getElementById("btn-cancel-edit").classList.remove("hidden");
+switchTab("tab-lancamento");
+}
+
+function deleteRecord(id) {
+if (!confirm("Deseja realmente excluir este lançamento?")) return;
+state.registros = state.registros.filter((r) => r.id !== id);
+saveState();
+renderTable();
+showToast("Registro excluído.");
+}
+
+function createEntryId(prefix) {
+return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function renderDashboard() {
+const summary = getStockSummary();
+document.getElementById("dash-entradas").textContent = formatNumber(
+state.movimentacoes.filter((movement) => movement.operacao === "entrada").length
+);
+document.getElementById("dash-saidas").textContent = formatNumber(
+state.movimentacoes.filter((movement) => movement.operacao === "saida").length
+);
+document.getElementById("dash-itens").textContent = formatNumber(
+summary.filter((row) => row.entradas - row.saidas > 0).length
+);
+
+const tbody = document.getElementById("tbody-saldo-estoque");
+tbody.innerHTML = summary.map((row) => `
+<tr>
+<td>${escapeHTML(getCategoryLabel(row.categoria))}</td>
+<td><strong>${escapeHTML(row.nome)}</strong></td>
+<td>${escapeHTML(row.medida || "—")}</td>
+<td class="num">${formatQuantity(row.entradas)} ${escapeHTML(row.unidade)}</td>
+<td class="num">${formatQuantity(row.saidas)} ${escapeHTML(row.unidade)}</td>
+<td class="num"><strong>${formatQuantity(row.entradas - row.saidas)} ${escapeHTML(row.unidade)}</strong></td>
+</tr>
+`).join("");
+document.getElementById("empty-stock").classList.toggle("hidden", summary.length > 0);
+}
+
+function renderMovements() {
+const tbody = document.getElementById("tbody-movimentacoes");
+const movements = [...state.movimentacoes].sort((a, b) =>
+b.data.localeCompare(a.data) || b.id.localeCompare(a.id));
+
+tbody.innerHTML = movements.map((movement) => `
+<tr>
+<td>${formatDateBR(movement.data)}</td>
+<td><span class="movement-type ${movement.operacao}">${movement.operacao === "entrada" ? "Entrada" : "Saída"}</span></td>
+<td>${escapeHTML(getCategoryLabel(getInventoryItem(movement.itemId)?.categoria || "outro"))}</td>
+<td>${escapeHTML(getInventoryLabel(getInventoryItem(movement.itemId)))}</td>
+<td class="num">${formatQuantity(movement.quantidade)} ${escapeHTML(getInventoryItem(movement.itemId)?.unidade || "")}</td>
+<td>${escapeHTML(movement.observacao)}</td>
+<td class="actions-col"><button type="button" class="btn-icon delete delete-movement" data-id="${escapeHTML(movement.id)}">Excluir</button></td>
+</tr>
+`).join("");
+
+document.getElementById("empty-movements").classList.toggle("hidden", movements.length > 0);
+tbody.querySelectorAll(".delete-movement").forEach((button) => {
+button.addEventListener("click", () => deleteMovement(button.dataset.id));
+});
+}
+
+function renderFinancialEntries() {
+const entries = state.lancamentosFinanceiros;
+const receivedCents = entries.reduce((total, entry) =>
+total + (entry.operacao === "entrada" ? Math.round(Number(entry.valor) * 100) : 0), 0);
+const paidCents = entries.reduce((total, entry) =>
+total + (entry.operacao === "saida" ? Math.round(Number(entry.valor) * 100) : 0), 0);
+
+document.getElementById("cash-entradas").textContent = formatCurrency(receivedCents / 100);
+document.getElementById("cash-saidas").textContent = formatCurrency(paidCents / 100);
+document.getElementById("cash-saldo").textContent = formatCurrency(getCashBalanceInCents() / 100);
+
+const tbody = document.getElementById("tbody-valores");
+const sortedEntries = [...entries].sort((a, b) =>
+b.data.localeCompare(a.data) || b.id.localeCompare(a.id));
+tbody.innerHTML = sortedEntries.map((entry) => `
+<tr>
+<td>${formatDateBR(entry.data)}</td>
+<td><span class="movement-type ${entry.operacao}">${entry.operacao === "entrada" ? "Entrada" : "Saída"}</span></td>
+<td>${escapeHTML(entry.descricao)}</td>
+<td class="num">${formatCurrency(entry.valor)}</td>
+<td class="actions-col"><button type="button" class="btn-icon delete delete-value" data-id="${escapeHTML(entry.id)}">Excluir</button></td>
+</tr>
+`).join("");
+
+document.getElementById("empty-values").classList.toggle("hidden", entries.length > 0);
+tbody.querySelectorAll(".delete-value").forEach((button) => {
+button.addEventListener("click", () => deleteFinancialEntry(button.dataset.id));
+});
+}
+
+function deleteMovement(id) {
+const movement = state.movimentacoes.find((entry) => entry.id === id);
+if (!movement) return;
+if (movement.operacao === "entrada" &&
+getItemBalance(movement.itemId) - Number(movement.quantidade) < 0) {
+showToast("Não é possível excluir: há saídas que dependem desta entrada.");
+return;
+}
+if (!window.confirm("Excluir esta movimentação de madeira?")) return;
+
+const movements = state.movimentacoes.filter((entry) => entry.id !== id);
+if (!saveState({ ...state, movimentacoes: movements })) return;
+state.movimentacoes = movements;
+renderDashboard();
+renderMovements();
+showToast("Movimentação excluída.");
+}
+
+function deleteFinancialEntry(id) {
+const entry = state.lancamentosFinanceiros.find((item) => item.id === id);
+if (!entry) return;
+if (entry.operacao === "entrada" &&
+getCashBalanceInCents() - Math.round(Number(entry.valor) * 100) < 0) {
+showToast("Não é possível excluir: há pagamentos que dependem deste valor.");
+return;
+}
+if (!window.confirm("Excluir este lançamento financeiro?")) return;
+
+const entries = state.lancamentosFinanceiros.filter((item) => item.id !== id);
+if (!saveState({ ...state, lancamentosFinanceiros: entries })) return;
+state.lancamentosFinanceiros = entries;
+renderFinancialEntries();
+showToast("Lançamento financeiro excluído.");
+}
+
+document.getElementById("form-movimentacao").addEventListener("submit", (event) => {
+event.preventDefault();
+const operacao = document.getElementById("mov-tipo-operacao").value;
+const itemId = document.getElementById("mov-item").value;
+const quantidade = Number(document.getElementById("mov-quantidade").value);
+if (!Number.isFinite(quantidade) || quantidade <= 0) {
+showToast("Informe uma quantidade maior que zero.");
+return;
+}
+
+if (operacao === "saida") {
+const disponivel = getItemBalance(itemId);
+if (quantidade > disponivel) {
+const item = getInventoryItem(itemId);
+showToast(`Estoque insuficiente. Disponível: ${formatQuantity(disponivel)} ${item ? item.unidade : ""}.`);
+return;
+}
+}
+
+const movement = {
+id: createEntryId("madeira"),
+operacao,
+itemId,
+quantidade,
+data: document.getElementById("mov-data").value,
+observacao: document.getElementById("mov-observacao").value.trim()
+};
+const movements = [movement, ...state.movimentacoes];
+if (!saveState({ ...state, movimentacoes: movements })) return;
+state.movimentacoes = movements;
+event.currentTarget.reset();
+document.getElementById("mov-data").value = getTodayISO();
+updateMovementUnitHint();
+renderDashboard();
+renderMovements();
+showToast(operacao === "entrada" ? "Entrada no estoque registrada." : "Saída do estoque registrada.");
+});
+
+document.getElementById("mov-item").addEventListener("change", updateMovementUnitHint);
+
+document.getElementById("form-valor").addEventListener("submit", (event) => {
+event.preventDefault();
+const operacao = document.getElementById("valor-operacao").value;
+const valor = Math.round(Number(document.getElementById("valor-quantia").value) * 100) / 100;
+if (!Number.isFinite(valor) || valor <= 0) {
+showToast("Informe um valor maior que R$ 0,00.");
+return;
+}
+
+const valorEmCentavos = Math.round(valor * 100);
+if (operacao === "saida" && valorEmCentavos > getCashBalanceInCents()) {
+showToast(`Saldo insuficiente. Disponível: ${formatCurrency(getCashBalanceInCents() / 100)}.`);
+return;
+}
+
+const entry = {
+id: createEntryId("valor"),
+operacao,
+valor,
+data: document.getElementById("valor-data").value,
+descricao: document.getElementById("valor-descricao").value.trim()
+};
+const entries = [entry, ...state.lancamentosFinanceiros];
+if (!saveState({ ...state, lancamentosFinanceiros: entries })) return;
+state.lancamentosFinanceiros = entries;
+event.currentTarget.reset();
+document.getElementById("valor-data").value = getTodayISO();
+renderFinancialEntries();
+showToast(operacao === "entrada" ? "Valor recebido registrado." : "Pagamento registrado.");
+});
+
+// Filters
+["filter-cliente", "filter-tipo", "filter-data"].forEach((id) => {
+document.getElementById(id).addEventListener("change", renderTable);
+});
+
+document.getElementById("btn-clear-filters").addEventListener("click", () => {
+document.getElementById("filter-cliente").value = "";
+document.getElementById("filter-tipo").value = "";
+document.getElementById("filter-data").value = "";
+renderTable();
+});
+
+// Export CSV (Excel BR format with ;)
+document.getElementById("btn-export-csv").addEventListener("click", () => {
+const rows = getFilteredRecords();
+if (rows.length === 0) {
+showToast("Não há registros para exportar.");
+return;
+}
+
+const header = [
+"Data de Conferencia",
+"Fornecedor / Cliente",
+"Tipo de Item",
+"Medida",
+"Qtd. de Pacotes",
+"Unidades por Pacote",
+"Quantidade Total Contada"
+];
+
+const csvLines = [header.join(";")];
+rows.forEach((r) => {
+csvLines.push([
+formatDateBR(r.dataConferencia),
+`"${String(r.cliente).replace(/"/g, '""')}"`,
+`"${String(r.tipoItem).replace(/"/g, '""')}"`,
+`"${String(r.medida).replace(/"/g, '""')}"`,
+r.qtdPacotes,
+r.qtdPorPacote,
+r.qtdTotalContada
+].join(";"));
+});
+
+const bom = "\uFEFF";
+const blob = new Blob([bom + csvLines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+downloadBlob(blob, `conferencia_madeiras_${getTodayISO()}.csv`);
+showToast("Planilha CSV gerada para o Excel!");
+});
+
+// Backup & Restore JSON
+document.getElementById("btn-export-json").addEventListener("click", () => {
+const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+downloadBlob(blob, `backup_conferencia_${getTodayISO()}.json`);
+showToast("Backup JSON baixado!");
+});
+
+document.getElementById("input-import-json").addEventListener("change", (e) => {
+const file = e.target.files[0];
+if (!file) return;
+if (!window.confirm("Restaurar este backup substituirá os dados atuais. Deseja continuar?")) {
+e.target.value = "";
+return;
+}
+
+const reader = new FileReader();
+reader.onload = () => {
+try {
+const imported = normalizeState(JSON.parse(reader.result), state);
+if (!saveState(imported)) return;
+state = imported;
+renderSelects();
+renderStandardLists();
+renderTable();
+document.getElementById("mov-data").value = getTodayISO();
+document.getElementById("valor-data").value = getTodayISO();
+renderDashboard();
+renderMovements();
+renderFinancialEntries();
+showToast("Backup restaurado com sucesso!");
+} catch (error) {
+console.error("Falha ao restaurar o backup.", error);
+showToast("Arquivo de backup inválido ou corrompido.");
+}
+};
+reader.onerror = () => {
+console.error("Não foi possível ler o arquivo de backup.", reader.error);
+showToast("Não foi possível ler o arquivo selecionado.");
+};
+reader.readAsText(file);
+e.target.value = "";
+});
+
+function downloadBlob(blob, filename) {
+const url = URL.createObjectURL(blob);
+const a = document.createElement("a");
+a.href = url;
+a.download = filename;
+document.body.appendChild(a);
+a.click();
+a.remove();
+setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// Register Service Worker for offline PWA
+if ("serviceWorker" in navigator) {
+window.addEventListener("load", () => {
+navigator.serviceWorker.register("./sw.js").catch((error) => {
+console.error("Não foi possível ativar o modo offline.", error);
+showToast("Modo offline indisponível. Abra pelo endereço HTTPS ou localhost.");
+});
+});
+}
+
+// Init
+document.getElementById("input-data").value = getTodayISO();
+document.getElementById("mov-data").value = getTodayISO();
+document.getElementById("valor-data").value = getTodayISO();
+renderSelects();
+renderStandardLists();
+addBoxComponentRow();
+renderTable();
+renderDashboard();
+renderMovements();
+renderFinancialEntries();
