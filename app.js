@@ -89,6 +89,7 @@ typeof record.cliente === "string" &&
 typeof record.tipoItem === "string" &&
 typeof record.medida === "string" &&
 (record.modeloBoxId === undefined || typeof record.modeloBoxId === "string") &&
+(record.dataRecebimento === undefined || record.dataRecebimento === "" || isValidISODate(record.dataRecebimento)) &&
 (record.boxNumber === undefined || (
 Number.isInteger(record.boxNumber) &&
 record.boxNumber >= 1 &&
@@ -236,10 +237,25 @@ const offset = now.getTimezoneOffset() * 60000;
 return new Date(now - offset).toISOString().split("T")[0];
 }
 
+function isValidISODate(value) {
+if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+const date = new Date(`${value}T00:00:00Z`);
+return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
 function formatDateBR(iso) {
 if (!iso) return "";
 const [y, m, d] = iso.split("-");
 return `${d}/${m}/${y}`;
+}
+
+function formatStorageDuration(receiptDate) {
+if (!receiptDate) return "Não informado";
+const elapsedDays = Math.floor(
+(Date.parse(`${getTodayISO()}T00:00:00Z`) - Date.parse(`${receiptDate}T00:00:00Z`)) / 86400000
+);
+if (elapsedDays < 0) return "Data futura";
+return `${formatNumber(elapsedDays)} ${elapsedDays === 1 ? "dia" : "dias"}`;
 }
 
 function formatNumber(n) {
@@ -700,6 +716,11 @@ if (boxNumber !== null && (!Number.isInteger(totalQuantity) || totalQuantity < 1
 showToast("Informe uma quantidade total válida para o Box.");
 return;
 }
+const receiptDate = document.getElementById("input-data-recebimento").value;
+if (!isValidISODate(receiptDate) || receiptDate > getTodayISO()) {
+showToast("Informe uma data de recebimento válida, que não seja futura.");
+return;
+}
 const record = {
 id: editId || (boxNumber !== null ? createEntryId("box-record") : String(Date.now())),
 cliente: document.getElementById("select-cliente").value,
@@ -708,6 +729,7 @@ medida: document.getElementById("select-medida").value,
 qtdPacotes: Number(inputPacotes.value) || 0,
 qtdPorPacote: Number(inputUnidPacote.value) || 0,
 qtdTotalContada: totalQuantity || 0,
+dataRecebimento: receiptDate,
 dataConferencia: document.getElementById("input-data").value,
 ...(boxNumber !== null ? { boxNumber } : {}),
 ...(boxModel ? { modeloBoxId: boxModel.id } : {})
@@ -748,6 +770,8 @@ legacyBoxQuantityWithoutPackages = false;
 totalModeTag.textContent = "Auto";
 totalModeTag.className = "tag-auto";
 document.getElementById("input-data").value = getTodayISO();
+document.getElementById("input-data-recebimento").value = getTodayISO();
+document.getElementById("input-data-recebimento").max = getTodayISO();
 }
 
 function renderBoxHistory() {
@@ -760,6 +784,8 @@ tbody.innerHTML = records.map((record) => `
 <tr>
 <td><strong>Box ${record.boxNumber}</strong></td>
 <td>${escapeHTML(getItemTypeLabel(record))}</td>
+<td>${record.dataRecebimento ? formatDateBR(record.dataRecebimento) : "Não informado"}</td>
+<td>${formatStorageDuration(record.dataRecebimento)}</td>
 <td>${formatDateBR(record.dataConferencia)}</td>
 <td>${escapeHTML(record.cliente)}</td>
 <td>${escapeHTML(record.medida)}</td>
@@ -928,6 +954,7 @@ inputUnidPacote.value = r.qtdPorPacote;
 inputTotal.value = r.qtdTotalContada;
 updateVolumePreview();
 document.getElementById("input-data").value = r.dataConferencia;
+document.getElementById("input-data-recebimento").value = r.dataRecebimento || "";
 
 manualTotalOverride = r.qtdTotalContada !== r.qtdPacotes * r.qtdPorPacote;
 legacyBoxQuantityWithoutPackages = isBoxEntry && r.qtdPacotes === 0 && r.qtdPorPacote === 0;
@@ -1161,6 +1188,8 @@ return;
 }
 
 const header = [
+"Data de Recebimento",
+"Tempo desde o Recebimento",
 "Data de Conferencia",
 "Fornecedor / Cliente",
 "Tipo de Item",
@@ -1174,6 +1203,8 @@ const header = [
 const csvLines = [header.join(";")];
 rows.forEach((r) => {
 csvLines.push([
+formatDateBR(r.dataRecebimento),
+formatStorageDuration(r.dataRecebimento),
 formatDateBR(r.dataConferencia),
 `"${String(r.cliente).replace(/"/g, '""')}"`,
 `"${String(getConferenceTypeLabel(r)).replace(/"/g, '""')}"`,
@@ -1258,6 +1289,8 @@ showToast("Modo offline indisponível. Abra pelo endereço HTTPS ou localhost.")
 
 // Init
 document.getElementById("input-data").value = getTodayISO();
+document.getElementById("input-data-recebimento").value = getTodayISO();
+document.getElementById("input-data-recebimento").max = getTodayISO();
 document.getElementById("mov-data").value = getTodayISO();
 document.getElementById("valor-data").value = getTodayISO();
 renderSelects();

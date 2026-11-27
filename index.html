@@ -12,7 +12,7 @@
     <title>Conferência de Madeiras & Estoque</title>
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="./manifest.json" />
-    <link rel="stylesheet" href="./style.css?v=7" />
+    <link rel="stylesheet" href="./style.css?v=8" />
 </head>
 
 <body>
@@ -134,7 +134,13 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="input-data">Data *</label>
+                        <label for="input-data-recebimento">Data de Recebimento da Madeira *</label>
+                        <input type="date" id="input-data-recebimento" required />
+                        <small class="hint">Acompanhe há quantos dias o material está armazenado.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="input-data">Data da Conferência *</label>
                         <input type="date" id="input-data" required />
                     </div>
 
@@ -154,7 +160,9 @@
                             <tr>
                                 <th>Box</th>
                                 <th>Tipo de Item</th>
-                                <th>Data</th>
+                                <th>Recebimento</th>
+                                <th>Tempo desde o recebimento</th>
+                                <th>Data da Conferência</th>
                                 <th>Fornecedor / Cliente</th>
                                 <th>Medida</th>
                                 <th class="num">Pacotes</th>
@@ -513,7 +521,7 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="./app.js?v=7"></script>
+    <script src="./app.js?v=8"></script>
 </body>
 
 </html>
