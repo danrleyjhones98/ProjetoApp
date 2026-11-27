@@ -58,7 +58,6 @@ clientes: [...DEFAULT_STATE.clientes],
 tipos: [...DEFAULT_STATE.tipos],
 medidas: [...DEFAULT_STATE.medidas],
 medidasPorTipo: createMeasuresByType(DEFAULT_STATE.tipos, DEFAULT_STATE.medidas),
-medidasPadraoPorTipo: Object.create(null),
 medidasPadraoPorClienteETipo: Object.create(null),
 registros: [],
 movimentacoes: [],
@@ -273,22 +272,6 @@ allMeasures.push(measure);
 });
 });
 
-const defaultMeasuresByType = Object.create(null);
-const sourceDefaults = candidate.medidasPadraoPorTipo;
-if (sourceDefaults !== undefined) {
-if (!sourceDefaults || typeof sourceDefaults !== "object" || Array.isArray(sourceDefaults) ||
-!Object.keys(sourceDefaults).every((type) => typeof sourceDefaults[type] === "string")) {
-throw new Error("As medidas padrão por tipo de item são inválidas.");
-}
-Object.keys(sourceDefaults).forEach((type) => {
-const measure = sourceDefaults[type];
-if (measure && (!measuresByType[type] || !measuresByType[type].includes(measure))) {
-throw new Error(`A medida padrão de "${type}" não está cadastrada para esse tipo.`);
-}
-if (measure) defaultMeasuresByType[type] = measure;
-});
-}
-
 const defaultMeasuresByClientAndType = Object.create(null);
 const sourceClientDefaults = candidate.medidasPadraoPorClienteETipo;
 if (sourceClientDefaults !== undefined) {
@@ -322,7 +305,6 @@ clientes: candidate.clientes ? [...candidate.clientes] : [...fallback.clientes],
 tipos: types,
 medidas: allMeasures,
 medidasPorTipo: measuresByType,
-medidasPadraoPorTipo: defaultMeasuresByType,
 medidasPadraoPorClienteETipo: defaultMeasuresByClientAndType,
 registros: candidate.registros.map((record) => (
 record.boxNumber !== undefined && record.boxId === undefined
@@ -834,7 +816,7 @@ fillSelect(selectCliente, state.clientes, "", curCliente);
 renderConferenceTypeSelect(curTipo);
 renderBoxNameEditSelect();
 renderItemTypeSelect(curItemType);
-renderMeasureSelect(curItemType, curMedida || getDefaultMeasureForType(curItemType, curCliente));
+renderMeasureSelect(curItemType, curMedida || getAssignedMeasure(curCliente, curItemType));
 
 fillSelect(filterCliente, state.clientes, "Todos os clientes", curFCliente);
 fillSelect(filterTipo, conferenceTypes, "Todos os itens", curFTipo);
@@ -858,13 +840,8 @@ select.appendChild(legacyGroup);
 }
 }
 
-function getDefaultMeasureForType(itemType, client = document.getElementById("select-cliente").value) {
-const clientDefault = state.medidasPadraoPorClienteETipo[client]?.[itemType];
-if (clientDefault) return clientDefault;
-const configuredMeasure = state.medidasPadraoPorTipo[itemType];
-if (configuredMeasure) return configuredMeasure;
-const measures = state.medidasPorTipo[itemType] || [];
-return measures.length === 1 ? measures[0] : "";
+function getAssignedMeasure(client, itemType) {
+return state.medidasPadraoPorClienteETipo[client]?.[itemType] || "";
 }
 
 function renderMeasureSelect(itemType, selectedValue = "") {
@@ -886,13 +863,14 @@ select.appendChild(legacyGroup);
 
 document.getElementById("select-item-type").addEventListener("change", (event) => {
 const itemType = event.currentTarget.value;
-renderMeasureSelect(itemType, getDefaultMeasureForType(itemType));
+const client = document.getElementById("select-cliente").value;
+renderMeasureSelect(itemType, getAssignedMeasure(client, itemType));
 updateVolumePreview();
 });
 
 document.getElementById("select-cliente").addEventListener("change", (event) => {
 const itemType = document.getElementById("select-item-type").value;
-renderMeasureSelect(itemType, getDefaultMeasureForType(itemType, event.currentTarget.value));
+renderMeasureSelect(itemType, getAssignedMeasure(event.currentTarget.value, itemType));
 updateVolumePreview();
 });
 
@@ -1058,56 +1036,37 @@ selectEl.appendChild(opt);
 });
 }
 
-function renderMeasuresByType() {
-const typeSelect = document.getElementById("select-measure-type");
-const selectedType = typeSelect.value;
-fillSelect(typeSelect, state.tipos, "", selectedType);
-
-const list = document.getElementById("list-medidas");
+function renderClientTypeMeasures(client, itemType) {
+const list = document.getElementById("list-client-type-measures");
 list.innerHTML = "";
-if (!typeSelect.value) {
-list.innerHTML = '<li class="list-empty">Selecione um tipo de item.</li>';
+if (!client || !itemType) {
+list.innerHTML = '<li class="list-empty">Selecione um fornecedor e um tipo de item.</li>';
 return;
 }
 
-const itemType = typeSelect.value;
 const measures = state.medidasPorTipo[itemType] || [];
 if (measures.length === 0) {
 list.innerHTML = '<li class="list-empty">Nenhuma medida cadastrada para este tipo.</li>';
 return;
 }
 
-measures.forEach((measure, index) => {
+measures.forEach((measure) => {
 const item = document.createElement("li");
 const label = document.createElement("span");
 label.textContent = measure;
-const actions = document.createElement("div");
-actions.className = "measure-actions";
-const isDefault = state.medidasPadraoPorTipo[itemType] === measure;
-const defaultButton = document.createElement("button");
-defaultButton.type = "button";
-defaultButton.className = "btn-set-default";
-defaultButton.textContent = isDefault ? "Padrão geral" : "Usar para todos";
-defaultButton.disabled = isDefault;
-defaultButton.setAttribute("aria-pressed", String(isDefault));
-defaultButton.addEventListener("click", () => setDefaultMeasureForType(itemType, measure));
-
 const deleteButton = document.createElement("button");
 deleteButton.type = "button";
 deleteButton.className = "btn-del-item";
 deleteButton.textContent = "Excluir";
-deleteButton.addEventListener("click", () => {
-if (document.getElementById("select-item-type").value === itemType &&
-document.getElementById("select-medida").value === measure) {
-document.getElementById("select-medida").value = "";
-}
-const nextMeasuresByType = Object.create(null);
-Object.keys(state.medidasPorTipo).forEach((type) => {
-nextMeasuresByType[type] = [...state.medidasPorTipo[type]];
+deleteButton.addEventListener("click", () => removeMeasureFromType(itemType, measure));
+item.append(label, deleteButton);
+list.appendChild(item);
 });
-nextMeasuresByType[itemType].splice(index, 1);
-const nextDefaults = Object.assign(Object.create(null), state.medidasPadraoPorTipo);
-if (nextDefaults[itemType] === measure) delete nextDefaults[itemType];
+}
+
+function removeMeasureFromType(itemType, measure) {
+const nextMeasuresByType = Object.assign(Object.create(null), state.medidasPorTipo);
+nextMeasuresByType[itemType] = (nextMeasuresByType[itemType] || []).filter((item) => item !== measure);
 const nextClientDefaults = cloneClientTypeMeasureDefaults();
 Object.keys(nextClientDefaults).forEach((client) => {
 if (nextClientDefaults[client][itemType] === measure) delete nextClientDefaults[client][itemType];
@@ -1117,19 +1076,13 @@ const nextState = {
 ...state,
 medidas: [...new Set(Object.values(nextMeasuresByType).flat())],
 medidasPorTipo: nextMeasuresByType,
-medidasPadraoPorTipo: nextDefaults,
 medidasPadraoPorClienteETipo: nextClientDefaults
 };
 if (!saveState(nextState)) return;
 state = nextState;
 renderSelects();
 renderStandardLists();
-showToast("Medida removida deste tipo de item.");
-});
-actions.append(defaultButton, deleteButton);
-item.append(label, actions);
-list.appendChild(item);
-});
+showToast("Medida removida deste tipo de item e das atribuições relacionadas.");
 }
 
 function cloneClientTypeMeasureDefaults() {
@@ -1148,6 +1101,7 @@ const removeButton = document.getElementById("btn-remove-client-measure");
 const status = document.getElementById("client-measure-status");
 const client = clientSelect.value;
 const itemType = typeSelect.value;
+renderClientTypeMeasures(client, itemType);
 fillSelect(clientSelect, state.clientes, "Selecione um fornecedor...", client);
 fillSelect(typeSelect, state.tipos, "Selecione um tipo...", itemType);
 
@@ -1155,12 +1109,11 @@ const measures = itemType ? state.medidasPorTipo[itemType] || [] : [];
 const assignedMeasure = client && itemType
 ? state.medidasPadraoPorClienteETipo[client]?.[itemType] || ""
 : "";
-const defaultMeasure = client && itemType ? getDefaultMeasureForType(itemType, client) : "";
 fillSelect(
 measureSelect,
 measures,
 "Selecione uma medida...",
-assignedMeasure || defaultMeasure
+assignedMeasure
 );
 measureSelect.disabled = !client || !itemType || measures.length === 0;
 removeButton.classList.toggle("hidden", !assignedMeasure);
@@ -1169,39 +1122,53 @@ if (!client || !itemType) {
 status.textContent = "Selecione um fornecedor e um tipo de item.";
 } else if (assignedMeasure) {
 status.textContent = `Medida atribuída: ${assignedMeasure}. Você pode selecionar outra e salvar para alterar.`;
-} else if (defaultMeasure) {
-status.textContent = `Sem atribuição específica. Será usada a medida padrão geral: ${defaultMeasure}.`;
+} else if (measures.length > 0) {
+status.textContent = "Nenhuma medida atribuída para esta combinação. Escolha uma e atribua.";
 } else {
-status.textContent = "Nenhuma medida padrão definida para essa combinação.";
+status.textContent = "Nenhuma medida cadastrada para este tipo. Adicione uma abaixo.";
 }
 }
 
 document.getElementById("select-measure-client").addEventListener("change", renderClientTypeMeasureOptions);
 document.getElementById("select-client-measure-type").addEventListener("change", renderClientTypeMeasureOptions);
 
-document.getElementById("form-client-type-measure").addEventListener("submit", (event) => {
-event.preventDefault();
-const client = document.getElementById("select-measure-client").value;
-const itemType = document.getElementById("select-client-measure-type").value;
-const measure = document.getElementById("select-client-type-measure").value;
+function saveClientTypeMeasure(client, itemType, measure, addMeasure) {
 if (!client || !itemType || !measure) {
 showToast("Selecione fornecedor, tipo de item e medida.");
-return;
+return false;
 }
-if (!(state.medidasPorTipo[itemType] || []).includes(measure)) {
-showToast("A medida escolhida não está cadastrada para esse tipo de item.");
-return;
+if (!state.clientes.includes(client) || !state.tipos.includes(itemType)) {
+showToast("O fornecedor ou tipo de item selecionado não está cadastrado.");
+return false;
 }
 
-const previousDefault = getDefaultMeasureForType(itemType, client);
+const measures = state.medidasPorTipo[itemType] || [];
+const existingMeasure = measures.find((item) =>
+item.toLocaleLowerCase("pt-BR") === measure.toLocaleLowerCase("pt-BR")
+);
+if (!addMeasure && !measures.includes(measure)) {
+showToast("A medida escolhida não está cadastrada para esse tipo de item.");
+return false;
+}
+const assignedMeasure = existingMeasure || measure;
+const previousMeasure = getAssignedMeasure(client, itemType);
+const nextMeasuresByType = Object.assign(Object.create(null), state.medidasPorTipo);
+if (addMeasure && !existingMeasure) nextMeasuresByType[itemType] = [...measures, measure];
 const nextClientDefaults = cloneClientTypeMeasureDefaults();
 const clientDefaults = Object.assign(
 Object.create(null),
 nextClientDefaults[client] || {}
 );
-clientDefaults[itemType] = measure;
+clientDefaults[itemType] = assignedMeasure;
 nextClientDefaults[client] = clientDefaults;
-const nextState = { ...state, medidasPadraoPorClienteETipo: nextClientDefaults };
+const nextState = {
+...state,
+medidas: addMeasure && !existingMeasure
+? [...new Set([...state.medidas, measure])]
+: state.medidas,
+medidasPorTipo: nextMeasuresByType,
+medidasPadraoPorClienteETipo: nextClientDefaults
+};
 if (!saveState(nextState)) return;
 state = nextState;
 
@@ -1209,19 +1176,38 @@ const formClient = document.getElementById("select-cliente").value;
 const formItemType = document.getElementById("select-item-type").value;
 const formMeasure = document.getElementById("select-medida").value;
 if (formClient === client && formItemType === itemType &&
-(!formMeasure || formMeasure === previousDefault)) {
-renderMeasureSelect(itemType, measure);
+(!formMeasure || formMeasure === previousMeasure)) {
+renderMeasureSelect(itemType, assignedMeasure);
 updateVolumePreview();
 }
 renderClientTypeMeasureOptions();
-showToast(`"${measure}" atribuída a ${client} — ${itemType}.`);
+showToast(addMeasure && !existingMeasure
+? `"${assignedMeasure}" adicionada e atribuída a ${client} — ${itemType}.`
+: `"${assignedMeasure}" atribuída a ${client} — ${itemType}.`);
+return true;
+}
+
+document.getElementById("form-client-type-measure").addEventListener("submit", (event) => {
+event.preventDefault();
+const client = document.getElementById("select-measure-client").value;
+const itemType = document.getElementById("select-client-measure-type").value;
+const measure = document.getElementById("select-client-type-measure").value;
+saveClientTypeMeasure(client, itemType, measure, false);
+});
+
+document.getElementById("form-add-client-type-measure").addEventListener("submit", (event) => {
+event.preventDefault();
+const client = document.getElementById("select-measure-client").value;
+const itemType = document.getElementById("select-client-measure-type").value;
+const input = document.getElementById("input-new-client-type-measure");
+if (saveClientTypeMeasure(client, itemType, input.value.trim(), true)) input.value = "";
 });
 
 document.getElementById("btn-remove-client-measure").addEventListener("click", () => {
 const client = document.getElementById("select-measure-client").value;
 const itemType = document.getElementById("select-client-measure-type").value;
-const previousDefault = state.medidasPadraoPorClienteETipo[client]?.[itemType];
-if (!previousDefault) return;
+const previousMeasure = getAssignedMeasure(client, itemType);
+if (!previousMeasure) return;
 
 const nextClientDefaults = cloneClientTypeMeasureDefaults();
 delete nextClientDefaults[client][itemType];
@@ -1232,77 +1218,17 @@ state = nextState;
 
 if (document.getElementById("select-cliente").value === client &&
 document.getElementById("select-item-type").value === itemType &&
-document.getElementById("select-medida").value === previousDefault) {
-renderMeasureSelect(itemType, getDefaultMeasureForType(itemType, client));
+document.getElementById("select-medida").value === previousMeasure) {
+renderMeasureSelect(itemType);
 updateVolumePreview();
 }
 renderClientTypeMeasureOptions();
 showToast(`Atribuição removida de ${client} — ${itemType}.`);
 });
 
-function setDefaultMeasureForType(itemType, measure) {
-const previousDefault = state.medidasPadraoPorTipo[itemType] || "";
-const nextDefaults = Object.assign(Object.create(null), state.medidasPadraoPorTipo);
-nextDefaults[itemType] = measure;
-const nextState = { ...state, medidasPadraoPorTipo: nextDefaults };
-if (!saveState(nextState)) return;
-state = nextState;
-
-const currentType = document.getElementById("select-item-type").value;
-const currentMeasure = document.getElementById("select-medida").value;
-if (currentType === itemType && (!currentMeasure || currentMeasure === previousDefault)) {
-renderMeasureSelect(itemType, measure);
-updateVolumePreview();
-}
-renderMeasuresByType();
-showToast(`"${measure}" definida como medida padrão para ${itemType}.`);
-}
-
-document.getElementById("select-measure-type").addEventListener("change", renderMeasuresByType);
-
-document.getElementById("form-add-measure").addEventListener("submit", (event) => {
-event.preventDefault();
-const itemType = document.getElementById("select-measure-type").value;
-const input = event.currentTarget.querySelector("input");
-const measure = input.value.trim();
-if (!itemType) {
-showToast("Selecione um tipo de item antes de cadastrar a medida.");
-return;
-}
-if (!measure) return;
-
-const measures = state.medidasPorTipo[itemType] || [];
-if (measures.some((item) => item.toLocaleLowerCase("pt-BR") === measure.toLocaleLowerCase("pt-BR"))) {
-showToast("Esta medida já está cadastrada para este tipo de item.");
-return;
-}
-
-const nextMeasuresByType = Object.create(null);
-Object.keys(state.medidasPorTipo).forEach((type) => {
-nextMeasuresByType[type] = [...state.medidasPorTipo[type]];
-});
-nextMeasuresByType[itemType] = [...measures, measure];
-const nextDefaults = Object.assign(Object.create(null), state.medidasPadraoPorTipo);
-if (!nextDefaults[itemType]) nextDefaults[itemType] = measure;
-const allMeasures = [...new Set(Object.values(nextMeasuresByType).flat())];
-const nextState = {
-...state,
-medidas: allMeasures,
-medidasPorTipo: nextMeasuresByType,
-medidasPadraoPorTipo: nextDefaults
-};
-if (!saveState(nextState)) return;
-state = nextState;
-input.value = "";
-renderSelects();
-renderStandardLists();
-showToast(`"${measure}" adicionada para ${itemType}.`);
-});
-
 function renderStandardLists() {
 renderList("clientes", "list-clientes");
 renderList("tipos", "list-tipos");
-renderMeasuresByType();
 renderClientTypeMeasureOptions();
 renderInventoryItems();
 }
@@ -1472,7 +1398,7 @@ showToast("Item de estoque cadastrado.");
 document.querySelectorAll(".add-standard-form").forEach((form) => {
 form.addEventListener("submit", (e) => {
 e.preventDefault();
-if (form.id === "form-add-measure") return;
+if (form.id === "form-add-client-type-measure") return;
 const listKey = form.dataset.list;
 const input = form.querySelector("input");
 const val = input.value.trim();
@@ -1514,17 +1440,14 @@ return;
 }
 const nextMeasuresByType = Object.assign(Object.create(null), state.medidasPorTipo);
 nextMeasuresByType[itemType] = [...measures, clean];
-const nextDefaults = Object.assign(Object.create(null), state.medidasPadraoPorTipo);
-if (!nextDefaults[itemType]) nextDefaults[itemType] = clean;
 const nextState = {
 ...state,
 medidas: [...new Set(Object.values(nextMeasuresByType).flat())],
-medidasPorTipo: nextMeasuresByType,
-medidasPadraoPorTipo: nextDefaults
+medidasPorTipo: nextMeasuresByType
 };
 if (!saveState(nextState)) return;
 state = nextState;
-renderMeasuresByType();
+renderClientTypeMeasureOptions();
 renderMeasureSelect(itemType, clean);
 updateVolumePreview();
 showToast(`"${clean}" selecionada para ${itemType}.`);
@@ -1555,9 +1478,9 @@ document.getElementById(selectIds[target]).value = clean;
 const selectedClient = document.getElementById("select-cliente").value;
 const selectedItemType = document.getElementById("select-item-type").value;
 if (target === "tipos") {
-renderMeasureSelect(clean, getDefaultMeasureForType(clean, selectedClient));
+renderMeasureSelect(clean, getAssignedMeasure(selectedClient, clean));
 } else if (target === "clientes") {
-renderMeasureSelect(selectedItemType, getDefaultMeasureForType(selectedItemType, clean));
+renderMeasureSelect(selectedItemType, getAssignedMeasure(clean, selectedItemType));
 }
 updateVolumePreview();
 showToast(`"${clean}" selecionado!`);

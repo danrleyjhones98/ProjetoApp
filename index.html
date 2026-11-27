@@ -12,7 +12,7 @@
     <title>Conferência de Madeiras & Estoque</title>
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="./manifest.json" />
-    <link rel="stylesheet" href="./style.css?v=16" />
+    <link rel="stylesheet" href="./style.css?v=17" />
 </head>
 
 <body>
@@ -551,60 +551,48 @@
                     <ul id="list-tipos" class="standard-list"></ul>
                 </div>
 
-                <!-- Medidas por tipo de item -->
                 <div class="card">
-                    <h3>Medidas por Tipo de Item</h3>
-                    <div class="form-group">
-                        <label for="select-measure-type">Tipo de Item</label>
-                        <select id="select-measure-type">
-                            <option value=""></option>
-                        </select>
-                    </div>
-                    <p class="hint">Defina uma medida padrão geral para o tipo. Para usar medidas diferentes por
-                        fornecedor, configure a atribuição abaixo. A medida pode ser alterada no lançamento.</p>
-                    <form id="form-add-measure" class="add-standard-form">
-                        <input type="text" placeholder="Ex: 1,10 x 0,07 x 0,019" required />
-                        <button type="submit" class="btn btn-primary btn-sm">Adicionar</button>
-                    </form>
-                    <ul id="list-medidas" class="standard-list">
-                        <li class="list-empty">Selecione um tipo de item.</li>
-                    </ul>
-
-                    <div class="measure-assignment-section">
-                        <h4>Medida por Fornecedor e Tipo</h4>
-                        <p class="hint">Escolha o fornecedor, o tipo e a medida que deve ser preenchida automaticamente.</p>
-                        <form id="form-client-type-measure">
-                            <div class="grid-2">
-                                <div class="form-group">
-                                    <label for="select-measure-client">Fornecedor / Cliente</label>
-                                    <select id="select-measure-client" required>
-                                        <option value=""></option>
-                                    </select>
-                                </div>
-                                <div class="form-group">
-                                    <label for="select-client-measure-type">Tipo de Item</label>
-                                    <select id="select-client-measure-type" required>
-                                        <option value=""></option>
-                                    </select>
-                                </div>
-                            </div>
+                    <h3>Medida por Fornecedor e Tipo de Item</h3>
+                    <p class="hint">Configure a medida automática para uma combinação específica. Ela não será aplicada a outros fornecedores ou tipos.</p>
+                    <form id="form-client-type-measure">
+                        <div class="grid-2">
                             <div class="form-group">
-                                <label for="select-client-type-measure">Medida automática</label>
-                                <select id="select-client-type-measure" required disabled>
+                                <label for="select-measure-client">Fornecedor / Cliente</label>
+                                <select id="select-measure-client" required>
                                     <option value=""></option>
                                 </select>
                             </div>
-                            <div class="measure-assignment-actions">
-                                <button type="submit" class="btn btn-primary btn-sm">Atribuir medida</button>
-                                <button type="button" id="btn-remove-client-measure" class="btn btn-ghost btn-sm hidden">
-                                    Remover atribuição
-                                </button>
+                            <div class="form-group">
+                                <label for="select-client-measure-type">Tipo de Item</label>
+                                <select id="select-client-measure-type" required>
+                                    <option value=""></option>
+                                </select>
                             </div>
-                            <small id="client-measure-status" class="hint" role="status" aria-live="polite">
-                                Selecione um fornecedor e um tipo de item.
-                            </small>
-                        </form>
-                    </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="select-client-type-measure">Medida para esta combinação</label>
+                            <select id="select-client-type-measure" required disabled>
+                                <option value=""></option>
+                            </select>
+                        </div>
+                        <div class="measure-assignment-actions">
+                            <button type="submit" class="btn btn-primary btn-sm">Atribuir medida</button>
+                            <button type="button" id="btn-remove-client-measure" class="btn btn-ghost btn-sm hidden">
+                                Remover atribuição
+                            </button>
+                        </div>
+                        <small id="client-measure-status" class="hint" role="status" aria-live="polite">
+                            Selecione um fornecedor e um tipo de item.
+                        </small>
+                    </form>
+                    <form id="form-add-client-type-measure" class="add-standard-form">
+                        <input id="input-new-client-type-measure" type="text" placeholder="Nova medida (ex: 1,10 x 0,07 x 0,019)" required />
+                        <button type="submit" class="btn btn-primary btn-sm">Adicionar e atribuir</button>
+                    </form>
+                    <h4 class="measure-list-title">Medidas disponíveis para atribuir</h4>
+                    <ul id="list-client-type-measures" class="standard-list">
+                        <li class="list-empty">Selecione um tipo de item.</li>
+                    </ul>
                 </div>
             </div>
 
@@ -649,7 +637,7 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="./app.js?v=16"></script>
+    <script src="./app.js?v=17"></script>
 </body>
 
 </html>
