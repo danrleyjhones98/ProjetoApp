@@ -58,13 +58,31 @@ font-size: 0.8rem;
 color: #cbd5e1;
 }
 
-.badge-offline {
+.badge-offline,
+.badge-online,
+.badge-syncing,
+.badge-error {
 background: rgba(255, 255, 255, 0.14);
 color: #e2e8f0;
 font-size: 0.72rem;
 padding: 4px 10px;
 border-radius: 999px;
 white-space: nowrap;
+}
+
+.badge-online {
+background: #166534;
+color: #f0fdf4;
+}
+
+.badge-syncing {
+background: #92400e;
+color: #fffbeb;
+}
+
+.badge-error {
+background: #991b1b;
+color: #fef2f2;
 }
 
 .tab-bar {
@@ -186,6 +204,8 @@ color: #92400e;
 input[type="text"],
 input[type="number"],
 input[type="date"],
+input[type="password"],
+input[type="url"],
 select {
 width: 100%;
 min-height: 46px;
@@ -201,6 +221,20 @@ input:focus, select:focus {
 outline: none;
 border-color: var(--accent);
 box-shadow: 0 0 0 3px rgba(46, 111, 64, 0.15);
+}
+
+.sync-status {
+margin: 12px 0 8px;
+font-size: 0.9rem;
+font-weight: 600;
+color: var(--primary);
+}
+
+.sync-actions {
+display: flex;
+flex-wrap: wrap;
+gap: 8px;
+margin-bottom: 10px;
 }
 
 button:focus-visible,

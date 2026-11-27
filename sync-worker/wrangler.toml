@@ -1,0 +1,7 @@
+name = "projetoapp-sync"
+main = "worker.js"
+compatibility_date = "2024-12-01"
+
+[vars]
+DATA_REPO_OWNER = "danrleyjhones98"
+DATA_REPO_NAME = "ProjetoApp-dados"

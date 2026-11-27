@@ -1,4 +1,6 @@
 const STORAGE_KEY = "conferencia_madeiras_v1";
+const SYNC_CONFIG_KEY = "conferencia_madeiras_sync_config_v1";
+const SYNC_METADATA_KEY = "conferencia_madeiras_sync_metadata_v1";
 const BOX_MODEL_VALUE_PREFIX = "box-model:";
 const BOX_ENTRY_VALUE_PREFIX = "box-entry:";
 const LEGACY_TYPE_VALUE_PREFIX = "legacy-type:";
@@ -41,8 +43,13 @@ modelosBox: []
 };
 
 let state = loadState();
+let syncConfig = loadSyncConfig();
+let syncMetadata = loadSyncMetadata();
 let manualTotalOverride = false;
 let legacyBoxQuantityWithoutPackages = false;
+let syncTimer;
+let syncInProgress = false;
+let applyingRemoteState = false;
 
 function createDefaultState() {
 return {
@@ -284,12 +291,297 @@ return boxes;
 function saveState(nextState = state) {
 try {
 localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+scheduleAutoSync(nextState);
 return true;
 } catch (error) {
 console.error("Não foi possível salvar os dados locais.", error);
 showToast("Não foi possível salvar. Verifique o espaço e as permissões do navegador.");
 return false;
 }
+}
+
+function loadSyncConfig() {
+try {
+const config = JSON.parse(localStorage.getItem(SYNC_CONFIG_KEY));
+if (!config || typeof config.endpoint !== "string" || typeof config.accessKey !== "string") return null;
+return config;
+} catch (error) {
+console.error("A configuração de sincronização está inválida.", error);
+return null;
+}
+}
+
+function loadSyncMetadata() {
+try {
+const metadata = JSON.parse(localStorage.getItem(SYNC_METADATA_KEY));
+if (!metadata || typeof metadata.endpoint !== "string" ||
+typeof metadata.revision !== "string" || typeof metadata.snapshot !== "string") return null;
+return metadata;
+} catch (error) {
+console.error("Os dados de controle da sincronização estão inválidos.", error);
+return null;
+}
+}
+
+function setSyncMetadata(metadata) {
+try {
+localStorage.setItem(SYNC_METADATA_KEY, JSON.stringify(metadata));
+syncMetadata = metadata;
+} catch (error) {
+console.error("Não foi possível salvar o controle da sincronização.", error);
+throw new Error("A nuvem foi atualizada, mas não foi possível salvar o controle local da sincronização.");
+}
+}
+
+function setSyncStatus(message, status = "offline") {
+const badge = document.getElementById("status-badge");
+if (!badge) return;
+badge.textContent = message;
+badge.className = `badge-${status}`;
+badge.title = status === "online"
+? "Dados sincronizados com o repositório privado."
+: status === "syncing"
+? "Sincronização em andamento."
+: status === "error"
+? "Há dados locais que ainda não foram sincronizados."
+: "Dados salvos localmente neste aparelho.";
+const syncStatus = document.getElementById("sync-status");
+if (syncStatus) syncStatus.textContent = message;
+}
+
+function saveSyncConfig(endpoint, accessKey) {
+let parsedUrl;
+try {
+parsedUrl = new URL(endpoint);
+} catch {
+throw new Error("Informe o endereço válido do Cloudflare Worker.");
+}
+if (parsedUrl.protocol !== "https:" || parsedUrl.pathname !== "/" || parsedUrl.search || parsedUrl.hash) {
+throw new Error("O endereço deve ser a URL HTTPS principal do Worker, sem caminhos.");
+}
+if (accessKey.length < 32) throw new Error("A chave de acesso precisa ter pelo menos 32 caracteres.");
+
+const config = { endpoint: parsedUrl.origin, accessKey };
+try {
+localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(config));
+} catch (error) {
+console.error("Não foi possível guardar a configuração da sincronização.", error);
+throw new Error("Não foi possível salvar a configuração neste aparelho.");
+}
+if (syncConfig && syncConfig.endpoint !== config.endpoint) {
+try {
+localStorage.removeItem(SYNC_METADATA_KEY);
+} catch (error) {
+console.error("Não foi possível limpar a revisão da sincronização anterior.", error);
+throw new Error("Não foi possível atualizar a configuração neste aparelho.");
+}
+syncMetadata = null;
+}
+syncConfig = config;
+}
+
+async function requestSyncApi(method, body) {
+if (!syncConfig) throw new Error("Configure primeiro a sincronização segura.");
+const response = await fetch(`${syncConfig.endpoint}/data`, {
+method,
+headers: {
+Authorization: `Bearer ${syncConfig.accessKey}`,
+...(body === undefined ? {} : { "Content-Type": "application/json" })
+},
+...(body === undefined ? {} : { body: JSON.stringify(body) })
+});
+let result;
+try {
+result = await response.json();
+} catch {
+throw new Error("A API de sincronização retornou uma resposta inválida.");
+}
+if (!response.ok) {
+const error = new Error(result.error || `Falha na sincronização (HTTP ${response.status}).`);
+error.status = response.status;
+throw error;
+}
+return result;
+}
+
+function isDefaultAppState(candidate) {
+return JSON.stringify(candidate) === JSON.stringify(createDefaultState());
+}
+
+function serializedState(candidate) {
+return JSON.stringify(candidate);
+}
+
+async function writeCloudState(candidate, expectedRevision) {
+const result = await requestSyncApi("PUT", { state: candidate, expectedRevision });
+if (typeof result.revision !== "string") throw new Error("A API não confirmou a versão salva.");
+setSyncMetadata({
+endpoint: syncConfig.endpoint,
+revision: result.revision,
+snapshot: serializedState(candidate)
+});
+}
+
+function refreshAfterCloudLoad(cloudState) {
+const normalized = normalizeState(cloudState, DEFAULT_STATE);
+applyingRemoteState = true;
+try {
+if (!saveState(normalized)) throw new Error("Não foi possível salvar os dados baixados neste aparelho.");
+state = normalized;
+renderSelects();
+renderStandardLists();
+renderTable();
+renderBoxHistory();
+renderDashboard();
+renderMovements();
+renderFinancialEntries();
+} finally {
+applyingRemoteState = false;
+}
+}
+
+async function synchronizeData(mode = "auto", localState = state) {
+if (syncInProgress) throw new Error("Já existe uma sincronização em andamento.");
+if (!syncConfig) throw new Error("Configure primeiro o endereço e a chave da sincronização.");
+syncInProgress = true;
+setSyncStatus("Sincronizando...", "syncing");
+try {
+const remote = await requestSyncApi("GET");
+if (remote.state !== null && (typeof remote.state !== "object" || !Array.isArray(remote.state.registros))) {
+throw new Error("Os dados recebidos da nuvem não têm um formato válido.");
+}
+
+if (mode === "download") {
+if (!remote.state) throw new Error("Ainda não há dados salvos na nuvem.");
+refreshAfterCloudLoad(remote.state);
+setSyncMetadata({
+endpoint: syncConfig.endpoint,
+revision: remote.revision,
+snapshot: serializedState(state)
+});
+} else if (mode === "upload") {
+await writeCloudState(localState, remote.revision);
+} else if (!remote.state) {
+await writeCloudState(localState, null);
+} else if (!syncMetadata || syncMetadata.endpoint !== syncConfig.endpoint) {
+if (!isDefaultAppState(localState)) {
+throw new Error("Há dados neste aparelho e na nuvem. Escolha enviar este aparelho ou baixar os dados da nuvem.");
+}
+refreshAfterCloudLoad(remote.state);
+setSyncMetadata({
+endpoint: syncConfig.endpoint,
+revision: remote.revision,
+snapshot: serializedState(state)
+});
+} else if (remote.revision === syncMetadata.revision) {
+if (serializedState(localState) !== syncMetadata.snapshot) {
+await writeCloudState(localState, remote.revision);
+}
+} else if (serializedState(localState) === syncMetadata.snapshot) {
+refreshAfterCloudLoad(remote.state);
+setSyncMetadata({
+endpoint: syncConfig.endpoint,
+revision: remote.revision,
+snapshot: serializedState(state)
+});
+} else {
+throw new Error("A nuvem e este aparelho têm alterações diferentes. Escolha enviar este aparelho ou baixar os dados da nuvem.");
+}
+setSyncStatus("Sincronizado", "online");
+} catch (error) {
+setSyncStatus("Sincronização pendente", "error");
+throw error;
+} finally {
+syncInProgress = false;
+}
+}
+
+function scheduleAutoSync(nextState) {
+if (applyingRemoteState || !syncConfig || !syncMetadata ||
+syncMetadata.endpoint !== syncConfig.endpoint) return;
+clearTimeout(syncTimer);
+const snapshot = JSON.parse(JSON.stringify(nextState));
+syncTimer = setTimeout(() => {
+if (syncInProgress) {
+scheduleAutoSync(snapshot);
+return;
+}
+synchronizeData("auto", snapshot).catch((error) => {
+console.error("Não foi possível sincronizar os dados.", error);
+showToast(`${error.message} Os dados continuam salvos neste aparelho.`);
+});
+}, 1200);
+}
+
+function initializeSyncControls() {
+const form = document.getElementById("form-sync-settings");
+const endpointInput = document.getElementById("sync-worker-url");
+const accessKeyInput = document.getElementById("sync-access-key");
+const syncButton = document.getElementById("btn-sync-now");
+const downloadButton = document.getElementById("btn-sync-download");
+const uploadButton = document.getElementById("btn-sync-upload");
+if (!form || !endpointInput || !accessKeyInput) return;
+
+if (syncConfig) {
+endpointInput.value = syncConfig.endpoint;
+accessKeyInput.value = syncConfig.accessKey;
+setSyncStatus(syncMetadata ? "Sincronização configurada" : "Pronto para sincronizar");
+}
+
+window.addEventListener("online", () => {
+if (!syncConfig || !syncMetadata) return;
+synchronizeData().catch((error) => {
+console.error("A sincronização após reconectar falhou.", error);
+showToast(`${error.message} Os dados continuam salvos neste aparelho.`);
+});
+});
+
+window.addEventListener("offline", () => {
+if (syncConfig) setSyncStatus("Sem conexão — dados no aparelho", "error");
+});
+
+form.addEventListener("submit", (event) => {
+event.preventDefault();
+try {
+saveSyncConfig(endpointInput.value.trim(), accessKeyInput.value);
+setSyncStatus("Sincronização configurada");
+showToast("Configuração salva neste aparelho. Toque em Sincronizar agora.");
+} catch (error) {
+showToast(error.message);
+}
+});
+
+syncButton.addEventListener("click", async () => {
+try {
+await synchronizeData();
+showToast("Dados sincronizados com sucesso.");
+} catch (error) {
+console.error("Falha ao sincronizar.", error);
+showToast(error.message);
+}
+});
+
+downloadButton.addEventListener("click", async () => {
+if (!confirm("Substituir os dados deste aparelho pelos dados salvos na nuvem?")) return;
+try {
+await synchronizeData("download");
+showToast("Dados da nuvem carregados neste aparelho.");
+} catch (error) {
+console.error("Falha ao baixar os dados.", error);
+showToast(error.message);
+}
+});
+
+uploadButton.addEventListener("click", async () => {
+if (!confirm("Substituir todos os dados da nuvem pelos dados deste aparelho? Essa ação pode apagar alterações feitas em outros aparelhos.")) return;
+try {
+await synchronizeData("upload");
+showToast("Dados deste aparelho enviados para a nuvem.");
+} catch (error) {
+console.error("Falha ao enviar os dados.", error);
+showToast(error.message);
+}
+});
 }
 
 function showToast(msg) {
@@ -1466,3 +1758,4 @@ renderBoxHistory();
 renderDashboard();
 renderMovements();
 renderFinancialEntries();
+initializeSyncControls();

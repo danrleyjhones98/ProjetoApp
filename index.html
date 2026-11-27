@@ -12,7 +12,7 @@
     <title>Conferência de Madeiras & Estoque</title>
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="./manifest.json" />
-    <link rel="stylesheet" href="./style.css?v=10" />
+    <link rel="stylesheet" href="./style.css?v=11" />
 </head>
 
 <body>
@@ -454,6 +454,31 @@
             </p>
 
             <div class="card">
+                <h3>Sincronização segura entre aparelhos</h3>
+                <p class="hint">A sincronização usa uma API privada. A chave fica somente neste aparelho; não informe sua senha do GitHub aqui.</p>
+                <form id="form-sync-settings" autocomplete="off">
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label for="sync-worker-url">Endereço do serviço seguro *</label>
+                            <input type="url" id="sync-worker-url" inputmode="url" placeholder="https://seu-servico.workers.dev" autocomplete="url" required />
+                        </div>
+                        <div class="form-group">
+                            <label for="sync-access-key">Chave de acesso do serviço *</label>
+                            <input type="password" id="sync-access-key" minlength="32" autocomplete="new-password" required />
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-secondary btn-sm">Salvar configuração neste aparelho</button>
+                </form>
+                <p id="sync-status" class="sync-status" role="status" aria-live="polite">Sincronização não configurada</p>
+                <div class="sync-actions">
+                    <button type="button" id="btn-sync-now" class="btn btn-primary btn-sm">Sincronizar agora</button>
+                    <button type="button" id="btn-sync-download" class="btn btn-secondary btn-sm">Baixar dados da nuvem</button>
+                    <button type="button" id="btn-sync-upload" class="btn btn-secondary btn-sm">Enviar dados deste aparelho</button>
+                </div>
+                <p class="hint">Se houver alterações diferentes nos dois lugares, a sincronização para e pede uma escolha para evitar apagar dados.</p>
+            </div>
+
+            <div class="card">
                 <h3>Boxes</h3>
                 <p class="hint">Os Boxes de 1 a 36 permanecem cadastrados. Você também pode incluir outros e renomear qualquer Box.</p>
                 <div class="grid-2">
@@ -552,7 +577,7 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="./app.js?v=10"></script>
+    <script src="./app.js?v=11"></script>
 </body>
 
 </html>
