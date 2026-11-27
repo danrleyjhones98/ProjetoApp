@@ -135,9 +135,8 @@ if (!Array.isArray(inventoryItems) || !inventoryItems.every((item) =>
 item &&
 typeof item.id === "string" &&
 typeof item.nome === "string" &&
-["madeira", "pregos", "pallet", "box", "outro"].includes(item.categoria) &&
+["", "madeira", "pregos", "pallet", "box", "outro"].includes(item.categoria) &&
 typeof item.unidade === "string" &&
-item.unidade.trim() !== "" &&
 typeof item.medida === "string"
 )) {
 throw new Error("Um ou mais itens de estoque são inválidos.");
@@ -633,7 +632,7 @@ return state.itensEstoque.find((item) => item.id === id);
 
 function getInventoryLabel(item) {
 if (!item) return "Item removido";
-return [item.nome, item.medida].filter(Boolean).join(" — ");
+return [item.nome || "Item sem nome", item.medida].filter(Boolean).join(" — ");
 }
 
 function getCategoryLabel(category) {
@@ -644,7 +643,7 @@ pallet: "Pallet",
 box: "Box",
 outro: "Outro"
 };
-return labels[category] || category;
+return labels[category] || category || "Sem categoria";
 }
 
 function formatCurrency(value) {
@@ -873,7 +872,7 @@ select.innerHTML = '<option value="">Selecione um item...</option>';
 state.itensEstoque.forEach((item) => {
 const option = document.createElement("option");
 option.value = item.id;
-option.textContent = `${getCategoryLabel(item.categoria)} — ${getInventoryLabel(item)} (${item.unidade})`;
+option.textContent = `${getCategoryLabel(item.categoria)} — ${getInventoryLabel(item)}${item.unidade ? ` (${item.unidade})` : ""}`;
 option.selected = item.id === selectedItemId;
 select.appendChild(option);
 });
@@ -883,7 +882,7 @@ updateMovementUnitHint();
 function updateMovementUnitHint() {
 const item = getInventoryItem(document.getElementById("mov-item").value);
 document.getElementById("mov-unit-hint").textContent = item
-? `Quantidade em ${item.unidade}.`
+? (item.unidade ? `Quantidade em ${item.unidade}.` : "A unidade de contagem deste item não foi informada.")
 : state.itensEstoque.length
 ? "Selecione o item para ver sua unidade de contagem."
 : "Cadastre itens em Padrões antes de movimentar o estoque.";
@@ -1000,7 +999,7 @@ list.innerHTML = '<li class="list-empty">Nenhum item de estoque cadastrado.</li>
 state.itensEstoque.forEach((item) => {
 const li = document.createElement("li");
 const description = document.createElement("span");
-description.textContent = `${getCategoryLabel(item.categoria)} · ${getInventoryLabel(item)} (${item.unidade})`;
+description.textContent = `${getCategoryLabel(item.categoria)} · ${getInventoryLabel(item)}${item.unidade ? ` (${item.unidade})` : ""}`;
 
 const button = document.createElement("button");
 button.type = "button";
@@ -1048,6 +1047,7 @@ unidade: document.getElementById("item-unidade").value.trim(),
 medida: document.getElementById("item-medida").value.trim()
 };
 const duplicate = state.itensEstoque.some((existing) =>
+Boolean(item.nome || item.categoria || item.medida || item.unidade) &&
 existing.nome.toLocaleLowerCase() === item.nome.toLocaleLowerCase() &&
 existing.categoria === item.categoria &&
 existing.medida.toLocaleLowerCase() === item.medida.toLocaleLowerCase() &&
@@ -1457,11 +1457,11 @@ const tbody = document.getElementById("tbody-saldo-estoque");
 tbody.innerHTML = summary.map((row) => `
 <tr>
 <td>${escapeHTML(getCategoryLabel(row.categoria))}</td>
-<td><strong>${escapeHTML(row.nome)}</strong></td>
+<td><strong>${escapeHTML(row.nome || "Item sem nome")}</strong></td>
 <td>${escapeHTML(row.medida || "—")}</td>
-<td class="num">${formatQuantity(row.entradas)} ${escapeHTML(row.unidade)}</td>
-<td class="num">${formatQuantity(row.saidas)} ${escapeHTML(row.unidade)}</td>
-<td class="num"><strong>${formatQuantity(row.entradas - row.saidas)} ${escapeHTML(row.unidade)}</strong></td>
+<td class="num">${formatQuantity(row.entradas)}${row.unidade ? ` ${escapeHTML(row.unidade)}` : ""}</td>
+<td class="num">${formatQuantity(row.saidas)}${row.unidade ? ` ${escapeHTML(row.unidade)}` : ""}</td>
+<td class="num"><strong>${formatQuantity(row.entradas - row.saidas)}${row.unidade ? ` ${escapeHTML(row.unidade)}` : ""}</strong></td>
 </tr>
 `).join("");
 document.getElementById("empty-stock").classList.toggle("hidden", summary.length > 0);
@@ -1476,7 +1476,7 @@ tbody.innerHTML = movements.map((movement) => `
 <tr>
 <td>${formatDateBR(movement.data)}</td>
 <td><span class="movement-type ${movement.operacao}">${movement.operacao === "entrada" ? "Entrada" : "Saída"}</span></td>
-<td>${escapeHTML(getCategoryLabel(getInventoryItem(movement.itemId)?.categoria || "outro"))}</td>
+<td>${escapeHTML(getCategoryLabel(getInventoryItem(movement.itemId)?.categoria ?? "outro"))}</td>
 <td>${escapeHTML(getInventoryLabel(getInventoryItem(movement.itemId)))}</td>
 <td class="num">${formatQuantity(movement.quantidade)} ${escapeHTML(getInventoryItem(movement.itemId)?.unidade || "")}</td>
 <td>${escapeHTML(movement.observacao)}</td>

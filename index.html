@@ -12,7 +12,7 @@
     <title>Conferência de Madeiras & Estoque</title>
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="./manifest.json" />
-    <link rel="stylesheet" href="./style.css?v=11" />
+    <link rel="stylesheet" href="./style.css?v=12" />
 </head>
 
 <body>
@@ -540,16 +540,17 @@
             <div class="inventory-setup-grid">
                 <div class="card">
                     <h3>Itens do estoque</h3>
-                    <p class="hint inventory-hint">Cadastre madeiras, pregos, pallets e outros itens. Cada cadastro pode ter sua própria medida e unidade.</p>
+                    <p class="hint inventory-hint">Cadastre qualquer tipo de item. Todos os campos são opcionais; informe somente os detalhes disponíveis.</p>
                     <form id="form-item-estoque" class="inventory-form" autocomplete="off">
                         <div class="form-group">
-                            <label for="item-nome">Nome do item *</label>
-                            <input type="text" id="item-nome" maxlength="80" placeholder="Ex: Régua, prego 18x27, pallet" required />
+                            <label for="item-nome">Nome do item</label>
+                            <input type="text" id="item-nome" maxlength="80" placeholder="Ex: Régua, prego 18x27, pallet" />
                         </div>
                         <div class="grid-2">
                             <div class="form-group">
-                                <label for="item-categoria">Categoria *</label>
-                                <select id="item-categoria" required>
+                                <label for="item-categoria">Categoria</label>
+                                <select id="item-categoria">
+                                    <option value="" selected></option>
                                     <option value="madeira">Madeira</option>
                                     <option value="pregos">Pregos</option>
                                     <option value="pallet">Pallet</option>
@@ -558,8 +559,8 @@
                                 </select>
                             </div>
                             <div class="form-group">
-                                <label for="item-unidade">Unidade de contagem *</label>
-                                <input type="text" id="item-unidade" maxlength="20" placeholder="Ex: peça, kg, pallet" required />
+                                <label for="item-unidade">Unidade de contagem</label>
+                                <input type="text" id="item-unidade" maxlength="20" placeholder="Ex: peça, kg, pallet" />
                             </div>
                         </div>
                         <div class="form-group">
@@ -577,7 +578,7 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="./app.js?v=11"></script>
+    <script src="./app.js?v=12"></script>
 </body>
 
 </html>
