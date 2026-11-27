@@ -1,9 +1,9 @@
-const CACHE_NAME = "conferencia-madeiras-v9";
+const CACHE_NAME = "conferencia-madeiras-v10";
 const APP_SHELL = [
-  "./?v=9",
-  "./index.html?v=9",
-  "./style.css?v=9",
-  "./app.js?v=9",
+  "./?v=10",
+  "./index.html?v=10",
+  "./style.css?v=10",
+  "./app.js?v=10",
   "./manifest.json",
   "./icon.svg"
 ];
@@ -46,7 +46,7 @@ self.addEventListener("fetch", (event) => {
         if (cached) return cached;
 
         if (event.request.mode === "navigate") {
-          const offlinePage = await caches.match(new URL("./index.html?v=9", self.registration.scope));
+          const offlinePage = await caches.match(new URL("./index.html?v=10", self.registration.scope));
           if (offlinePage) return offlinePage;
         }
 

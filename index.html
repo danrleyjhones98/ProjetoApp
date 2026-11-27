@@ -12,7 +12,7 @@
     <title>Conferência de Madeiras & Estoque</title>
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="./manifest.json" />
-    <link rel="stylesheet" href="./style.css?v=9" />
+    <link rel="stylesheet" href="./style.css?v=10" />
 </head>
 
 <body>
@@ -63,9 +63,13 @@
 
                     <div class="form-group">
                         <label for="select-tipo">Número do Box *</label>
-                        <select id="select-tipo" required>
-                            <option value=""></option>
-                        </select>
+                        <div class="select-with-add">
+                            <select id="select-tipo" required>
+                                <option value=""></option>
+                            </select>
+                            <button type="button" id="btn-box-management" class="btn-box-management"
+                                title="Incluir ou renomear Boxes" aria-label="Incluir ou renomear Boxes">+</button>
+                        </div>
                     </div>
 
                     <div class="form-group">
@@ -449,6 +453,33 @@
                 Cadastre clientes, padrões da conferência e os itens usados no controle de estoque.
             </p>
 
+            <div class="card">
+                <h3>Boxes</h3>
+                <p class="hint">Os Boxes de 1 a 36 permanecem cadastrados. Você também pode incluir outros e renomear qualquer Box.</p>
+                <div class="grid-2">
+                    <form id="form-add-box">
+                        <div class="form-group">
+                            <label for="input-new-box-name">Nome do novo Box *</label>
+                            <input type="text" id="input-new-box-name" maxlength="60" required />
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm">Incluir Box</button>
+                    </form>
+                    <form id="form-rename-box">
+                        <div class="form-group">
+                            <label for="select-edit-box">Box para renomear *</label>
+                            <select id="select-edit-box" required>
+                                <option value=""></option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="input-edit-box-name">Novo nome do Box *</label>
+                            <input type="text" id="input-edit-box-name" maxlength="60" required disabled />
+                        </div>
+                        <button type="submit" id="btn-rename-box" class="btn btn-secondary btn-sm" disabled>Salvar nome</button>
+                    </form>
+                </div>
+            </div>
+
             <div class="standards-grid">
                 <!-- Clientes -->
                 <div class="card">
@@ -521,7 +552,7 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="./app.js?v=9"></script>
+    <script src="./app.js?v=10"></script>
 </body>
 
 </html>

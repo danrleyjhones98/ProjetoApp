@@ -214,7 +214,8 @@ display: flex;
 gap: 8px;
 }
 
-.btn-quick-add {
+.btn-quick-add,
+.btn-box-management {
 min-width: 46px;
 min-height: 46px;
 border-radius: 8px;
@@ -226,7 +227,8 @@ font-weight: 700;
 cursor: pointer;
 }
 
-.btn-quick-add:active {
+.btn-quick-add:active,
+.btn-box-management:active {
 background: #e5e7eb;
 }
 

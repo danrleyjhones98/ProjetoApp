@@ -1,10 +1,19 @@
 const STORAGE_KEY = "conferencia_madeiras_v1";
 const BOX_MODEL_VALUE_PREFIX = "box-model:";
-const BOX_NUMBER_VALUE_PREFIX = "box-number:";
+const BOX_ENTRY_VALUE_PREFIX = "box-entry:";
 const LEGACY_TYPE_VALUE_PREFIX = "legacy-type:";
 const BOX_NUMBERS = Array.from({ length: 36 }, (_, index) => index + 1);
 
+function createDefaultBoxes() {
+return BOX_NUMBERS.map((number) => ({
+id: `number-${number}`,
+name: `Box ${number}`,
+number
+}));
+}
+
 const DEFAULT_STATE = {
+boxes: createDefaultBoxes(),
 clientes: [
 "Cliente Padrão",
 "Construtora Litoral",
@@ -37,6 +46,7 @@ let legacyBoxQuantityWithoutPackages = false;
 
 function createDefaultState() {
 return {
+boxes: createDefaultBoxes(),
 clientes: [...DEFAULT_STATE.clientes],
 tipos: [...DEFAULT_STATE.tipos],
 medidas: [...DEFAULT_STATE.medidas],
@@ -73,6 +83,7 @@ if (!candidate || typeof candidate !== "object" || !Array.isArray(candidate.regi
 throw new Error("O backup não contém uma lista de registros válida.");
 }
 
+const boxes = normalizeBoxes(candidate.boxes);
 const listKeys = ["clientes", "tipos", "medidas"];
 for (const key of listKeys) {
 if (candidate[key] !== undefined &&
@@ -89,12 +100,18 @@ typeof record.cliente === "string" &&
 typeof record.tipoItem === "string" &&
 typeof record.medida === "string" &&
 (record.modeloBoxId === undefined || typeof record.modeloBoxId === "string") &&
+(record.boxId === undefined || (
+typeof record.boxId === "string" &&
+boxes.some((box) => box.id === record.boxId) &&
+record.modeloBoxId === undefined
+)) &&
 (record.dataRecebimento === undefined || record.dataRecebimento === "" || isValidISODate(record.dataRecebimento)) &&
 (record.boxNumber === undefined || (
 Number.isInteger(record.boxNumber) &&
 record.boxNumber >= 1 &&
 record.boxNumber <= 36 &&
-record.modeloBoxId === undefined
+record.modeloBoxId === undefined &&
+(record.boxId === undefined || record.boxId === `number-${record.boxNumber}`)
 )) &&
 typeof record.dataConferencia === "string" &&
 Number.isFinite(Number(record.qtdPacotes)) &&
@@ -147,7 +164,8 @@ if (candidate.registros.some((record) =>
 record.modeloBoxId && (
 !boxModelIds.has(record.modeloBoxId) ||
 record.tipoItem !== "Box" ||
-record.boxNumber !== undefined
+record.boxNumber !== undefined ||
+record.boxId !== undefined
 )
 )) {
 throw new Error("Uma ou mais conferências fazem referência a modelos de box inválidos.");
@@ -201,15 +219,66 @@ types.push("Pallet");
 }
 
 return {
+boxes,
 clientes: candidate.clientes ? [...candidate.clientes] : [...fallback.clientes],
 tipos: types,
 medidas: candidate.medidas ? [...candidate.medidas] : [...fallback.medidas],
-registros: candidate.registros,
+registros: candidate.registros.map((record) => (
+record.boxNumber !== undefined && record.boxId === undefined
+? { ...record, boxId: `number-${record.boxNumber}` }
+: record
+)),
 movimentacoes: movements,
 lancamentosFinanceiros: financialEntries,
 itensEstoque: inventoryItems,
 modelosBox: boxModels
 };
+}
+
+function normalizeBoxes(candidateBoxes) {
+if (candidateBoxes === undefined) return createDefaultBoxes();
+if (!Array.isArray(candidateBoxes) || !candidateBoxes.every((box) =>
+box &&
+typeof box.id === "string" &&
+box.id.trim() !== "" &&
+typeof box.name === "string" &&
+box.name.trim() !== "" &&
+(box.number === undefined || box.number === null || (
+Number.isInteger(box.number) &&
+box.number >= 1 &&
+box.number <= 36 &&
+box.id === `number-${box.number}`
+))
+)) {
+throw new Error("A lista de Boxes é inválida.");
+}
+
+const numberedBoxes = candidateBoxes.filter((box) => Number.isInteger(box.number));
+if (new Set(numberedBoxes.map((box) => box.number)).size !== numberedBoxes.length) {
+throw new Error("Há Boxes numerados duplicados.");
+}
+const customBoxes = candidateBoxes
+.filter((box) => box.number === undefined || box.number === null)
+.map((box) => ({ ...box, number: null }));
+const boxes = [
+...BOX_NUMBERS.map((number) =>
+numberedBoxes.find((box) => box.number === number) || {
+id: `number-${number}`,
+name: `Box ${number}`,
+number
+}
+),
+...customBoxes
+];
+
+if (new Set(boxes.map((box) => box.id)).size !== boxes.length) {
+throw new Error("Há Boxes com identificadores duplicados.");
+}
+const normalizedNames = boxes.map((box) => box.name.trim().toLocaleLowerCase("pt-BR"));
+if (new Set(normalizedNames).size !== normalizedNames.length) {
+throw new Error("Há Boxes com nomes duplicados.");
+}
+return boxes;
 }
 
 function saveState(nextState = state) {
@@ -328,6 +397,11 @@ switchTab(btn.dataset.tab);
 });
 });
 
+document.getElementById("btn-box-management").addEventListener("click", () => {
+switchTab("tab-padroes");
+document.getElementById("input-new-box-name").focus();
+});
+
 function switchTab(tabId) {
 document.querySelectorAll(".tab-btn").forEach((b) => {
 const active = b.dataset.tab === tabId;
@@ -363,6 +437,7 @@ conferenceTypes.push("Box");
 
 fillSelect(selectCliente, state.clientes, "", curCliente);
 renderConferenceTypeSelect(curTipo);
+renderBoxNameEditSelect();
 renderItemTypeSelect(curItemType);
 fillSelect(selectMedida, state.medidas, "", curMedida);
 
@@ -391,10 +466,10 @@ select.appendChild(legacyGroup);
 function renderConferenceTypeSelect(selectedValue = document.getElementById("select-tipo").value) {
 const select = document.getElementById("select-tipo");
 select.innerHTML = '<option value=""></option>';
-BOX_NUMBERS.forEach((number) => {
+state.boxes.forEach((box) => {
 const option = document.createElement("option");
-option.value = `${BOX_NUMBER_VALUE_PREFIX}${number}`;
-option.textContent = `Box ${number}`;
+option.value = `${BOX_ENTRY_VALUE_PREFIX}${box.id}`;
+option.textContent = box.name;
 option.selected = option.value === selectedValue;
 select.appendChild(option);
 });
@@ -413,10 +488,42 @@ select.appendChild(legacyGroup);
 }
 }
 
-function getBoxNumber(selectedValue) {
-if (!selectedValue.startsWith(BOX_NUMBER_VALUE_PREFIX)) return null;
-const number = Number(selectedValue.slice(BOX_NUMBER_VALUE_PREFIX.length));
-return BOX_NUMBERS.includes(number) ? number : null;
+function renderBoxNameEditSelect(selectedId = document.getElementById("select-edit-box").value) {
+const select = document.getElementById("select-edit-box");
+select.innerHTML = '<option value=""></option>';
+state.boxes.forEach((box) => {
+const option = document.createElement("option");
+option.value = box.id;
+option.textContent = box.name;
+option.selected = box.id === selectedId;
+select.appendChild(option);
+});
+
+const selectedBox = state.boxes.find((box) => box.id === selectedId);
+const nameInput = document.getElementById("input-edit-box-name");
+nameInput.value = selectedBox ? selectedBox.name : "";
+nameInput.disabled = !selectedBox;
+document.getElementById("btn-rename-box").disabled = !selectedBox;
+}
+
+function getSelectedBox(selectedValue) {
+if (!selectedValue.startsWith(BOX_ENTRY_VALUE_PREFIX)) return null;
+const boxId = selectedValue.slice(BOX_ENTRY_VALUE_PREFIX.length);
+return state.boxes.find((box) => box.id === boxId) || null;
+}
+
+function getRecordBoxId(record) {
+return record.boxId || (record.boxNumber ? `number-${record.boxNumber}` : "");
+}
+
+function getRecordBox(record) {
+const boxId = getRecordBoxId(record);
+return boxId ? state.boxes.find((box) => box.id === boxId) || null : null;
+}
+
+function getRecordBoxName(record) {
+const box = getRecordBox(record);
+return box ? box.name : "";
 }
 
 function getConferenceBoxModelId(selectedValue) {
@@ -429,12 +536,13 @@ function getItemTypeLabel(record) {
 if (record.modeloBoxId) {
 return state.modelosBox.find((model) => model.id === record.modeloBoxId)?.nome || record.tipoItem;
 }
-return record.boxNumber && record.tipoItem === "Box" ? "Tipo não informado" : record.tipoItem;
+return getRecordBoxId(record) && record.tipoItem === "Box" ? "Tipo não informado" : record.tipoItem;
 }
 
 function getConferenceTypeLabel(record) {
 const itemType = getItemTypeLabel(record);
-return record.boxNumber ? `Box ${record.boxNumber} — ${itemType}` : itemType;
+const boxName = getRecordBoxName(record);
+return boxName ? `${boxName} — ${itemType}` : itemType;
 }
 
 function calculateVolumeM3(measure, quantity) {
@@ -506,6 +614,60 @@ renderList("tipos", "list-tipos");
 renderList("medidas", "list-medidas");
 renderInventoryItems();
 }
+
+document.getElementById("select-edit-box").addEventListener("change", (event) => {
+renderBoxNameEditSelect(event.currentTarget.value);
+});
+
+document.getElementById("form-add-box").addEventListener("submit", (event) => {
+event.preventDefault();
+const name = document.getElementById("input-new-box-name").value.trim();
+if (!name) {
+showToast("Informe um nome para o Box.");
+return;
+}
+if (state.boxes.some((box) => box.name.trim().toLocaleLowerCase("pt-BR") === name.toLocaleLowerCase("pt-BR"))) {
+showToast("Já existe um Box com esse nome.");
+return;
+}
+
+const box = { id: createEntryId("custom-box"), name, number: null };
+const boxes = [...state.boxes, box];
+if (!saveState({ ...state, boxes })) return;
+state = { ...state, boxes };
+document.getElementById("input-new-box-name").value = "";
+renderSelects();
+renderBoxHistory();
+renderTable();
+showToast(`${name} incluído com sucesso.`);
+});
+
+document.getElementById("form-rename-box").addEventListener("submit", (event) => {
+event.preventDefault();
+const boxId = document.getElementById("select-edit-box").value;
+const name = document.getElementById("input-edit-box-name").value.trim();
+const box = state.boxes.find((item) => item.id === boxId);
+if (!box) return;
+if (!name) {
+showToast("Informe o novo nome do Box.");
+return;
+}
+if (state.boxes.some((item) =>
+item.id !== boxId &&
+item.name.trim().toLocaleLowerCase("pt-BR") === name.toLocaleLowerCase("pt-BR")
+)) {
+showToast("Já existe um Box com esse nome.");
+return;
+}
+
+const boxes = state.boxes.map((item) => item.id === boxId ? { ...item, name } : item);
+if (!saveState({ ...state, boxes })) return;
+state = { ...state, boxes };
+renderSelects();
+renderBoxHistory();
+renderTable();
+showToast(`${name} atualizado com sucesso.`);
+});
 
 function renderList(key, ulId) {
 const ul = document.getElementById(ulId);
@@ -701,7 +863,7 @@ e.preventDefault();
 const editId = document.getElementById("edit-id").value;
 const selectedType = document.getElementById("select-tipo").value;
 const selectedItemType = document.getElementById("select-item-type").value;
-const boxNumber = getBoxNumber(selectedType);
+const selectedBox = getSelectedBox(selectedType);
 const boxModelId = getConferenceBoxModelId(selectedType);
 const boxModel = boxModelId
 ? state.modelosBox.find((model) => model.id === boxModelId)
@@ -711,7 +873,7 @@ showToast("O modelo de box selecionado não está mais cadastrado.");
 return;
 }
 const totalQuantity = Number(inputTotal.value);
-if (boxNumber !== null && (!Number.isInteger(totalQuantity) || totalQuantity < 1)) {
+if (selectedBox && (!Number.isInteger(totalQuantity) || totalQuantity < 1)) {
 showToast("Informe uma quantidade total válida para o Box.");
 return;
 }
@@ -721,7 +883,7 @@ showToast("Informe uma data de recebimento válida, que não seja futura.");
 return;
 }
 const record = {
-id: editId || (boxNumber !== null ? createEntryId("box-record") : String(Date.now())),
+id: editId || (selectedBox ? createEntryId("box-record") : String(Date.now())),
 cliente: document.getElementById("select-cliente").value,
 tipoItem: selectedItemType,
 medida: document.getElementById("select-medida").value,
@@ -730,17 +892,20 @@ qtdPorPacote: Number(inputUnidPacote.value) || 0,
 qtdTotalContada: totalQuantity || 0,
 dataRecebimento: receiptDate,
 dataConferencia: document.getElementById("input-data").value,
-...(boxNumber !== null ? { boxNumber } : {}),
+...(selectedBox ? {
+boxId: selectedBox.id,
+...(Number.isInteger(selectedBox.number) ? { boxNumber: selectedBox.number } : {})
+} : {}),
 ...(boxModel ? { modeloBoxId: boxModel.id } : {})
 };
 
 if (editId) {
 const idx = state.registros.findIndex((r) => r.id === editId);
 if (idx !== -1) state.registros[idx] = record;
-showToast(boxNumber !== null ? `Box ${boxNumber} atualizado!` : "Conferência atualizada!");
+showToast(selectedBox ? `${selectedBox.name} atualizado!` : "Conferência atualizada!");
 } else {
 state.registros.unshift(record);
-showToast(boxNumber !== null ? `Box ${boxNumber} salvo com sucesso!` : "Conferência salva com sucesso!");
+showToast(selectedBox ? `${selectedBox.name} salvo com sucesso!` : "Conferência salva com sucesso!");
 }
 
 saveState();
@@ -777,12 +942,12 @@ document.getElementById("input-data-recebimento").max = getTodayISO();
 function renderBoxHistory() {
 const tbody = document.getElementById("tbody-conferencias-box");
 const records = state.registros
-.filter((record) => record.boxNumber)
+.filter((record) => getRecordBoxId(record))
 .sort((a, b) => b.dataConferencia.localeCompare(a.dataConferencia) || b.id.localeCompare(a.id));
 
 tbody.innerHTML = records.map((record) => `
 <tr>
-<td><strong>Box ${record.boxNumber}</strong></td>
+<td><strong>${escapeHTML(getRecordBoxName(record))}</strong></td>
 <td>${escapeHTML(getItemTypeLabel(record))}</td>
 <td>${record.dataRecebimento ? formatDateBR(record.dataRecebimento) : "Não informado"}</td>
 <td>${formatStorageDuration(record.dataRecebimento)}</td>
@@ -833,7 +998,7 @@ records.forEach((record) => {
 const key = JSON.stringify([
 record.cliente,
 record.tipoItem,
-record.boxNumber || "",
+getRecordBoxId(record),
 record.modeloBoxId || "",
 record.medida
 ]);
@@ -879,8 +1044,8 @@ tr.innerHTML = `
 <td><strong>${escapeHTML(r.cliente)}</strong></td>
 <td>${escapeHTML(getConferenceTypeLabel(r))}</td>
 <td>${escapeHTML(r.medida)}</td>
-<td class="num">${r.boxNumber && r.qtdPacotes === 0 && r.qtdPorPacote === 0 ? "—" : formatNumber(r.qtdPacotes)}</td>
-<td class="num">${r.boxNumber && r.qtdPacotes === 0 && r.qtdPorPacote === 0 ? "—" : formatNumber(r.qtdPorPacote)}</td>
+<td class="num">${getRecordBoxId(r) && r.qtdPacotes === 0 && r.qtdPorPacote === 0 ? "—" : formatNumber(r.qtdPacotes)}</td>
+<td class="num">${getRecordBoxId(r) && r.qtdPacotes === 0 && r.qtdPorPacote === 0 ? "—" : formatNumber(r.qtdPorPacote)}</td>
 <td class="num"><strong>${formatNumber(r.qtdTotalContada)}</strong></td>
 <td class="num">${formatVolumeM3(r.medida, r.qtdTotalContada)}</td>
 <td class="actions-col">
@@ -895,7 +1060,7 @@ tbody.appendChild(tr);
 
 const clients = new Set(filtered.map((record) => record.cliente));
 const materials = new Set(filtered.map((record) =>
-JSON.stringify([record.tipoItem, record.boxNumber || "", record.modeloBoxId || "", record.medida])
+JSON.stringify([record.tipoItem, getRecordBoxId(record), record.modeloBoxId || "", record.medida])
 ));
 document.getElementById("kpi-registros").textContent = formatNumber(filtered.length);
 document.getElementById("kpi-clientes").textContent = formatNumber(clients.size);
@@ -937,9 +1102,11 @@ function startEdit(id) {
 const r = state.registros.find((item) => item.id === id);
 if (!r) return;
 
-const isBoxEntry = Number.isInteger(r.boxNumber);
+const boxId = getRecordBoxId(r);
+const box = getRecordBox(r);
+const isBoxEntry = Boolean(boxId);
 const selectedType = isBoxEntry
-? `${BOX_NUMBER_VALUE_PREFIX}${r.boxNumber}`
+? `${BOX_ENTRY_VALUE_PREFIX}${boxId}`
 : r.modeloBoxId
 ? `${BOX_MODEL_VALUE_PREFIX}${r.modeloBoxId}`
 : `${LEGACY_TYPE_VALUE_PREFIX}${r.tipoItem}`;
@@ -962,7 +1129,7 @@ totalModeTag.textContent = manualTotalOverride ? "Manual" : "Auto";
 totalModeTag.className = manualTotalOverride ? "tag-manual" : "tag-auto";
 
 document.getElementById("form-title").textContent = isBoxEntry
-? `Editando Box ${r.boxNumber}`
+? `Editando ${box.name}`
 : "Editando Conferência anterior";
 document.getElementById("btn-submit").textContent = isBoxEntry ? "Atualizar Box" : "Atualizar registro";
 document.getElementById("btn-cancel-edit").classList.remove("hidden");
