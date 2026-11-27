@@ -361,12 +361,12 @@ if (!conferenceTypes.some((type) => type.trim().toLocaleLowerCase("pt-BR") === "
 conferenceTypes.push("Box");
 }
 
-fillSelect(selectCliente, state.clientes, "Selecione o fornecedor/cliente...", curCliente);
+fillSelect(selectCliente, state.clientes, "", curCliente);
 renderConferenceTypeSelect(curTipo);
 renderItemTypeSelect(curItemType);
-fillSelect(selectMedida, state.medidas, "Selecione a medida...", curMedida);
+fillSelect(selectMedida, state.medidas, "", curMedida);
 
-fillSelect(filterCliente, state.clientes, "Todos os fornecedores/clientes", curFCliente);
+fillSelect(filterCliente, state.clientes, "Todos os clientes", curFCliente);
 fillSelect(filterTipo, conferenceTypes, "Todos os itens", curFTipo);
 updateVolumePreview();
 renderInventorySelects(curMovementItem);
@@ -374,7 +374,7 @@ renderInventorySelects(curMovementItem);
 
 function renderItemTypeSelect(selectedValue = document.getElementById("select-item-type").value) {
 const select = document.getElementById("select-item-type");
-fillSelect(select, state.tipos, "Selecione um tipo de item...", selectedValue);
+fillSelect(select, state.tipos, "", selectedValue);
 
 if (selectedValue && !state.tipos.includes(selectedValue)) {
 const legacyGroup = document.createElement("optgroup");
@@ -390,7 +390,7 @@ select.appendChild(legacyGroup);
 
 function renderConferenceTypeSelect(selectedValue = document.getElementById("select-tipo").value) {
 const select = document.getElementById("select-tipo");
-select.innerHTML = '<option value="">Selecione um Box de 1 a 36...</option>';
+select.innerHTML = '<option value=""></option>';
 BOX_NUMBERS.forEach((number) => {
 const option = document.createElement("option");
 option.value = `${BOX_NUMBER_VALUE_PREFIX}${number}`;
@@ -446,7 +446,7 @@ const volumePerPiece = dimensions
 .reduce((volume, dimension) => volume * dimension, 1);
 const total = Number(quantity);
 if (!Number.isFinite(volumePerPiece) || volumePerPiece <= 0 || !Number.isFinite(total) || total < 0) return null;
-return volumePerPiece * total / 1000000;
+return volumePerPiece * total;
 }
 
 function formatVolumeValue(volume) {
@@ -461,9 +461,8 @@ return volume === null ? "—" : formatVolumeValue(volume);
 function updateVolumePreview() {
 const measure = document.getElementById("select-medida").value;
 const quantity = document.getElementById("input-total").value;
-document.getElementById("input-volume-m3").value = quantity === ""
-? "—"
-: formatVolumeM3(measure, quantity);
+const volume = quantity === "" ? null : calculateVolumeM3(measure, quantity);
+document.getElementById("input-volume-m3").value = volume === null ? "" : formatVolumeValue(volume);
 }
 
 document.getElementById("select-medida").addEventListener("change", updateVolumePreview);
@@ -641,7 +640,7 @@ document.querySelectorAll(".btn-quick-add").forEach((btn) => {
 btn.addEventListener("click", () => {
 const target = btn.dataset.target;
 const labels = {
-clientes: "Novo Fornecedor/Cliente:",
+clientes: "Novo Cliente:",
 tipos: "Novo Tipo de Item (Madeira):",
 medidas: "Nova Medida (ex: 1,10 x 0,07 x 0,019):"
 };
@@ -751,16 +750,17 @@ renderBoxHistory();
 });
 
 function resetForm() {
-const selectedBoxNumber = getBoxNumber(document.getElementById("select-tipo").value);
-const selectedItemType = document.getElementById("select-item-type").value;
 document.getElementById("edit-id").value = "";
 document.getElementById("form-title").textContent = "Registrar Box";
 document.getElementById("btn-submit").textContent = "Salvar Box";
 document.getElementById("btn-cancel-edit").classList.add("hidden");
 
 document.getElementById("select-tipo").value = "";
-renderConferenceTypeSelect(selectedBoxNumber ? `${BOX_NUMBER_VALUE_PREFIX}${selectedBoxNumber}` : "");
-renderItemTypeSelect(selectedItemType);
+renderConferenceTypeSelect("");
+document.getElementById("select-item-type").value = "";
+renderItemTypeSelect("");
+document.getElementById("select-cliente").value = "";
+document.getElementById("select-medida").value = "";
 inputPacotes.value = "";
 inputUnidPacote.value = "";
 inputTotal.value = "";
@@ -770,7 +770,7 @@ legacyBoxQuantityWithoutPackages = false;
 totalModeTag.textContent = "Auto";
 totalModeTag.className = "tag-auto";
 document.getElementById("input-data").value = getTodayISO();
-document.getElementById("input-data-recebimento").value = getTodayISO();
+document.getElementById("input-data-recebimento").value = "";
 document.getElementById("input-data-recebimento").max = getTodayISO();
 }
 
@@ -839,7 +839,7 @@ record.medida
 ]);
 if (!totals.has(key)) {
 totals.set(key, {
-fornecedor: record.cliente,
+cliente: record.cliente,
 tipoItem: getConferenceTypeLabel(record),
 medida: record.medida,
 registros: 0,
@@ -858,7 +858,7 @@ else group.totalM3 += volume;
 });
 
 return [...totals.values()].sort((a, b) =>
-a.fornecedor.localeCompare(b.fornecedor, "pt-BR") ||
+a.cliente.localeCompare(b.cliente, "pt-BR") ||
 a.tipoItem.localeCompare(b.tipoItem, "pt-BR") ||
 a.medida.localeCompare(b.medida, "pt-BR"));
 }
@@ -893,18 +893,18 @@ tr.innerHTML = `
 tbody.appendChild(tr);
 });
 
-const suppliers = new Set(filtered.map((record) => record.cliente));
+const clients = new Set(filtered.map((record) => record.cliente));
 const materials = new Set(filtered.map((record) =>
 JSON.stringify([record.tipoItem, record.boxNumber || "", record.modeloBoxId || "", record.medida])
 ));
 document.getElementById("kpi-registros").textContent = formatNumber(filtered.length);
-document.getElementById("kpi-fornecedores").textContent = formatNumber(suppliers.size);
+document.getElementById("kpi-clientes").textContent = formatNumber(clients.size);
 document.getElementById("kpi-materiais").textContent = formatNumber(materials.size);
 
 const summaryBody = document.getElementById("tbody-resumo-materiais");
 summaryBody.innerHTML = materialTotals.map((group) => `
 <tr>
-<td><strong>${escapeHTML(group.fornecedor)}</strong></td>
+<td><strong>${escapeHTML(group.cliente)}</strong></td>
 <td>${escapeHTML(group.tipoItem)}</td>
 <td>${escapeHTML(group.medida)}</td>
 <td class="num">${formatNumber(group.registros)}</td>
@@ -1188,13 +1188,13 @@ return;
 }
 
 const header = [
-"Data de Recebimento",
-"Tempo desde o Recebimento",
-"Data de Conferencia",
-"Fornecedor / Cliente",
+"Data de chegada da madeira",
+"Tempo desde a chegada",
+"Data da conferência diária",
+"Cliente",
 "Tipo de Item",
 "Medida",
-"Qtd. de Pacotes",
+"Quantidade de Pacotes",
 "Unidades por Pacote",
 "Quantidade Total de Unidades",
 "Volume Total (m³)"
@@ -1289,7 +1289,6 @@ showToast("Modo offline indisponível. Abra pelo endereço HTTPS ou localhost.")
 
 // Init
 document.getElementById("input-data").value = getTodayISO();
-document.getElementById("input-data-recebimento").value = getTodayISO();
 document.getElementById("input-data-recebimento").max = getTodayISO();
 document.getElementById("mov-data").value = getTodayISO();
 document.getElementById("valor-data").value = getTodayISO();

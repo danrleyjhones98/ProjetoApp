@@ -12,7 +12,7 @@
     <title>Conferência de Madeiras & Estoque</title>
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="./manifest.json" />
-    <link rel="stylesheet" href="./style.css?v=8" />
+    <link rel="stylesheet" href="./style.css?v=9" />
 </head>
 
 <body>
@@ -64,7 +64,7 @@
                     <div class="form-group">
                         <label for="select-tipo">Número do Box *</label>
                         <select id="select-tipo" required>
-                            <option value="">Selecione um Box de 1 a 36...</option>
+                            <option value=""></option>
                         </select>
                     </div>
 
@@ -72,7 +72,7 @@
                         <label for="select-item-type">Tipo de Item *</label>
                         <div class="select-with-add">
                             <select id="select-item-type" required>
-                                <option value="">Selecione um tipo de item...</option>
+                                <option value=""></option>
                             </select>
                             <button type="button" class="btn-quick-add" data-target="tipos"
                                 title="Adicionar tipo de item">+</button>
@@ -80,13 +80,13 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="select-cliente">Fornecedor / Cliente *</label>
+                        <label for="select-cliente">Cliente *</label>
                         <div class="select-with-add">
                             <select id="select-cliente" required>
-                                <option value="">Selecione o fornecedor/cliente...</option>
+                                <option value=""></option>
                             </select>
                             <button type="button" class="btn-quick-add" data-target="clientes"
-                                title="Adicionar fornecedor/cliente">+</button>
+                                title="Adicionar cliente">+</button>
                         </div>
                     </div>
 
@@ -94,7 +94,7 @@
                         <label for="select-medida">Medida *</label>
                         <div class="select-with-add">
                             <select id="select-medida" required>
-                                <option value="">Selecione a medida...</option>
+                                <option value=""></option>
                             </select>
                             <button type="button" class="btn-quick-add" data-target="medidas"
                                 title="Adicionar nova medida">+</button>
@@ -103,24 +103,24 @@
 
                     <div class="grid-2">
                         <div class="form-group">
-                            <label for="input-pacotes">Qtd. de Pacotes *</label>
+                            <label for="input-pacotes">Quantidade de Pacotes *</label>
                             <input type="number" id="input-pacotes" inputmode="numeric" min="0" step="1"
-                                placeholder="Ex: 12" required />
+                                required />
                         </div>
 
                         <div class="form-group">
-                            <label for="input-unid-pacote">Unid. por Pacote *</label>
+                            <label for="input-unid-pacote">Unidades por Pacote *</label>
                             <input type="number" id="input-unid-pacote" inputmode="numeric" min="0" step="1"
-                                placeholder="Ex: 50" required />
+                                required />
                         </div>
                     </div>
 
                     <div class="form-group">
                         <div class="label-row">
-                            <label for="input-total">Qtd. Total de Unidades *</label>
+                            <label for="input-total">Quantidade Total de Unidades *</label>
                             <span id="total-mode-tag" class="tag-auto">Auto</span>
                         </div>
-                        <input type="number" id="input-total" inputmode="numeric" min="0" step="1" placeholder="0"
+                        <input type="number" id="input-total" inputmode="numeric" min="0" step="1"
                             required />
                         <small class="hint">Calculado automaticamente (pacotes × unidades por pacote); você pode
                             ajustar se houver peças avulsas.</small>
@@ -128,19 +128,19 @@
 
                     <div class="form-group">
                         <label for="input-volume-m3">Volume total (m³)</label>
-                        <input type="text" id="input-volume-m3" value="—" readonly />
-                        <small class="hint">Calculado com as três dimensões em centímetros multiplicadas pelo total
-                            de peças. Medidas com apenas duas dimensões não permitem calcular o volume.</small>
+                        <input type="text" id="input-volume-m3" value="" readonly />
+                        <small class="hint">Calculado multiplicando as três dimensões em metros pelo total de peças.
+                            Medidas com apenas duas dimensões não permitem calcular o volume.</small>
                     </div>
 
                     <div class="form-group">
-                        <label for="input-data-recebimento">Data de Recebimento da Madeira *</label>
+                        <label for="input-data-recebimento">Data de chegada da madeira *</label>
                         <input type="date" id="input-data-recebimento" required />
-                        <small class="hint">Acompanhe há quantos dias o material está armazenado.</small>
+                        <small class="hint">O tempo desde a chegada é calculado automaticamente.</small>
                     </div>
 
                     <div class="form-group">
-                        <label for="input-data">Data da Conferência *</label>
+                        <label for="input-data">Data da conferência diária *</label>
                         <input type="date" id="input-data" required />
                     </div>
 
@@ -160,14 +160,14 @@
                             <tr>
                                 <th>Box</th>
                                 <th>Tipo de Item</th>
-                                <th>Recebimento</th>
-                                <th>Tempo desde o recebimento</th>
-                                <th>Data da Conferência</th>
-                                <th>Fornecedor / Cliente</th>
+                                <th>Data de chegada</th>
+                                <th>Tempo desde a chegada</th>
+                                <th>Data da conferência diária</th>
+                                <th>Cliente</th>
                                 <th>Medida</th>
-                                <th class="num">Pacotes</th>
-                                <th class="num">Unid./Pacote</th>
-                                <th class="num">Total Unidades</th>
+                                <th class="num">Quantidade de Pacotes</th>
+                                <th class="num">Unidades por Pacote</th>
+                                <th class="num">Total de Unidades</th>
                                 <th class="num">Total (m³)</th>
                                 <th class="actions-col">Ações</th>
                             </tr>
@@ -359,8 +359,8 @@
                     <strong id="kpi-registros" class="kpi-value">0</strong>
                 </div>
                 <div class="kpi-card">
-                    <span class="kpi-label">Fornecedores</span>
-                    <strong id="kpi-fornecedores" class="kpi-value">0</strong>
+                    <span class="kpi-label">Clientes</span>
+                    <strong id="kpi-clientes" class="kpi-value">0</strong>
                 </div>
                 <div class="kpi-card highlight">
                     <span class="kpi-label">Materiais (tipo + medida)</span>
@@ -371,8 +371,8 @@
             <div class="card">
                 <div class="toolbar">
                     <div class="filters-grid">
-                        <select id="filter-cliente" aria-label="Filtrar por fornecedor ou cliente">
-                            <option value="">Todos os fornecedores/clientes</option>
+                        <select id="filter-cliente" aria-label="Filtrar por cliente">
+                            <option value="">Todos os clientes</option>
                         </select>
                         <select id="filter-tipo" aria-label="Filtrar por tipo de item">
                             <option value="">Todos os itens</option>
@@ -395,13 +395,13 @@
                 </div>
 
                 <div class="summary-block">
-                    <h3>Total contado por fornecedor e material</h3>
-                    <p class="hint">Cada linha soma somente o mesmo fornecedor, tipo de item e medida, respeitando os filtros aplicados.</p>
+                    <h3>Total contado por cliente e material</h3>
+                    <p class="hint">Cada linha soma somente o mesmo cliente, tipo de item e medida, respeitando os filtros aplicados.</p>
                     <div class="table-wrapper">
                         <table class="excel-table">
                             <thead>
                                 <tr>
-                                    <th>Fornecedor / Cliente</th>
+                                    <th>Cliente</th>
                                     <th>Box / Tipo de Item</th>
                                     <th>Medida</th>
                                     <th class="num">Registros</th>
@@ -421,11 +421,11 @@
                         <thead>
                             <tr>
                                 <th>Data</th>
-                                <th>Fornecedor / Cliente</th>
+                                <th>Cliente</th>
                                 <th>Box / Tipo de Item</th>
                                 <th>Medida</th>
-                                <th class="num">Pacotes</th>
-                                <th class="num">Unid./Pct</th>
+                                <th class="num">Quantidade de Pacotes</th>
+                                <th class="num">Unidades por Pacote</th>
                                 <th class="num">Total de Unidades</th>
                                 <th class="num">Total (m³)</th>
                                 <th class="actions-col">Ações</th>
@@ -452,9 +452,9 @@
             <div class="standards-grid">
                 <!-- Clientes -->
                 <div class="card">
-                    <h3>Fornecedores / Clientes</h3>
+                    <h3>Clientes</h3>
                     <form class="add-standard-form" data-list="clientes">
-                        <input type="text" placeholder="Nome do fornecedor ou cliente..." required />
+                        <input type="text" placeholder="Nome do cliente..." required />
                         <button type="submit" class="btn btn-primary btn-sm">Adicionar</button>
                     </form>
                     <ul id="list-clientes" class="standard-list"></ul>
@@ -521,7 +521,7 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="./app.js?v=8"></script>
+    <script src="./app.js?v=9"></script>
 </body>
 
 </html>
