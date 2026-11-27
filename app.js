@@ -32,7 +32,7 @@ modelosBox: []
 
 let state = loadState();
 let manualTotalOverride = false;
-let legacyConferenceEdit = false;
+let legacyBoxQuantityWithoutPackages = false;
 
 function createDefaultState() {
 return {
@@ -344,7 +344,7 @@ fillSelect(selectMedida, state.medidas, "Selecione a medida...", curMedida);
 
 fillSelect(filterCliente, state.clientes, "Todos os fornecedores/clientes", curFCliente);
 fillSelect(filterTipo, conferenceTypes, "Todos os itens", curFTipo);
-updateConferenceQuantityFields();
+updateVolumePreview();
 renderInventorySelects(curMovementItem);
 }
 
@@ -391,17 +391,36 @@ if (!record.modeloBoxId) return record.tipoItem;
 return state.modelosBox.find((model) => model.id === record.modeloBoxId)?.nome || record.tipoItem;
 }
 
-function updateConferenceQuantityFields() {
-const isBoxEntry = !legacyConferenceEdit || getBoxNumber(document.getElementById("select-tipo").value) !== null;
-document.getElementById("box-quantity-field").classList.toggle("hidden", !isBoxEntry);
-document.getElementById("conference-legacy-fields").classList.toggle("hidden", isBoxEntry);
-document.getElementById("input-qtd-box").required = isBoxEntry;
-document.getElementById("input-pacotes").required = !isBoxEntry;
-document.getElementById("input-unid-pacote").required = !isBoxEntry;
-document.getElementById("input-total").required = !isBoxEntry;
+function calculateVolumeM3(measure, quantity) {
+const dimensions = String(measure || "").match(/\d+(?:[.,]\d+)?/g) || [];
+if (dimensions.length !== 3) return null;
+
+const volumePerPiece = dimensions
+.map((dimension) => Number(dimension.replace(",", ".")))
+.reduce((volume, dimension) => volume * dimension, 1);
+const total = Number(quantity);
+if (!Number.isFinite(volumePerPiece) || volumePerPiece <= 0 || !Number.isFinite(total) || total < 0) return null;
+return volumePerPiece * total / 1000000;
 }
 
-document.getElementById("select-tipo").addEventListener("change", updateConferenceQuantityFields);
+function formatVolumeValue(volume) {
+return volume.toLocaleString("pt-BR", { maximumFractionDigits: 12 });
+}
+
+function formatVolumeM3(measure, quantity) {
+const volume = calculateVolumeM3(measure, quantity);
+return volume === null ? "—" : formatVolumeValue(volume);
+}
+
+function updateVolumePreview() {
+const measure = document.getElementById("select-medida").value;
+const quantity = document.getElementById("input-total").value;
+document.getElementById("input-volume-m3").value = quantity === ""
+? "—"
+: formatVolumeM3(measure, quantity);
+}
+
+document.getElementById("select-medida").addEventListener("change", updateVolumePreview);
 
 function renderInventorySelects(selectedItemId = document.getElementById("mov-item").value) {
 const select = document.getElementById("mov-item");
@@ -595,6 +614,7 @@ renderSelects();
 renderStandardLists();
 }
 document.getElementById(selectIds[target]).value = clean;
+updateVolumePreview();
 showToast(`"${clean}" selecionado!`);
 });
 });
@@ -604,15 +624,17 @@ const inputPacotes = document.getElementById("input-pacotes");
 const inputUnidPacote = document.getElementById("input-unid-pacote");
 const inputTotal = document.getElementById("input-total");
 const totalModeTag = document.getElementById("total-mode-tag");
-const inputBoxQuantity = document.getElementById("input-qtd-box");
 
 function updateAutoTotal() {
-if (manualTotalOverride) return;
+if (manualTotalOverride && !legacyBoxQuantityWithoutPackages) return;
+manualTotalOverride = false;
+legacyBoxQuantityWithoutPackages = false;
 const p = Number(inputPacotes.value) || 0;
 const u = Number(inputUnidPacote.value) || 0;
 inputTotal.value = p * u > 0 ? p * u : "";
 totalModeTag.textContent = "Auto";
 totalModeTag.className = "tag-auto";
+updateVolumePreview();
 }
 
 inputPacotes.addEventListener("input", updateAutoTotal);
@@ -620,8 +642,10 @@ inputUnidPacote.addEventListener("input", updateAutoTotal);
 
 inputTotal.addEventListener("input", () => {
 manualTotalOverride = true;
+legacyBoxQuantityWithoutPackages = false;
 totalModeTag.textContent = "Manual";
 totalModeTag.className = "tag-manual";
+updateVolumePreview();
 });
 
 // Save or Update Conferência
@@ -640,9 +664,9 @@ if (boxModelId && !boxModel) {
 showToast("O modelo de box selecionado não está mais cadastrado.");
 return;
 }
-const boxQuantity = Number(inputBoxQuantity.value);
-if (boxNumber !== null && (!Number.isInteger(boxQuantity) || boxQuantity < 1)) {
-showToast("Informe uma quantidade válida para o Box.");
+const totalQuantity = Number(inputTotal.value);
+if (boxNumber !== null && (!Number.isInteger(totalQuantity) || totalQuantity < 1)) {
+showToast("Informe uma quantidade total válida para o Box.");
 return;
 }
 const legacyType = selectedType.startsWith(LEGACY_TYPE_VALUE_PREFIX)
@@ -654,9 +678,9 @@ id: editId || (boxNumber !== null ? createEntryId("box-record") : String(Date.no
 cliente: document.getElementById("select-cliente").value,
 tipoItem: boxNumber !== null || boxModel ? "Box" : legacyType,
 medida: document.getElementById("select-medida").value,
-qtdPacotes: boxNumber !== null ? 0 : Number(inputPacotes.value) || 0,
-qtdPorPacote: boxNumber !== null ? 0 : Number(inputUnidPacote.value) || 0,
-qtdTotalContada: boxNumber !== null ? boxQuantity : Number(inputTotal.value) || 0,
+qtdPacotes: Number(inputPacotes.value) || 0,
+qtdPorPacote: Number(inputUnidPacote.value) || 0,
+qtdTotalContada: totalQuantity || 0,
 dataConferencia: document.getElementById("input-data").value,
 ...(boxNumber !== null ? { boxNumber } : {}),
 ...(boxModel ? { modeloBoxId: boxModel.id } : {})
@@ -679,7 +703,6 @@ renderBoxHistory();
 
 function resetForm() {
 const selectedBoxNumber = getBoxNumber(document.getElementById("select-tipo").value);
-legacyConferenceEdit = false;
 document.getElementById("edit-id").value = "";
 document.getElementById("form-title").textContent = "Registrar Box";
 document.getElementById("btn-submit").textContent = "Salvar Box";
@@ -687,12 +710,12 @@ document.getElementById("btn-cancel-edit").classList.add("hidden");
 
 document.getElementById("select-tipo").value = "";
 renderConferenceTypeSelect(selectedBoxNumber ? `${BOX_NUMBER_VALUE_PREFIX}${selectedBoxNumber}` : "");
-updateConferenceQuantityFields();
-inputBoxQuantity.value = "";
 inputPacotes.value = "";
 inputUnidPacote.value = "";
 inputTotal.value = "";
+updateVolumePreview();
 manualTotalOverride = false;
+legacyBoxQuantityWithoutPackages = false;
 totalModeTag.textContent = "Auto";
 totalModeTag.className = "tag-auto";
 document.getElementById("input-data").value = getTodayISO();
@@ -710,7 +733,10 @@ tbody.innerHTML = records.map((record) => `
 <td>${formatDateBR(record.dataConferencia)}</td>
 <td>${escapeHTML(record.cliente)}</td>
 <td>${escapeHTML(record.medida)}</td>
+<td class="num">${record.qtdPacotes === 0 && record.qtdPorPacote === 0 ? "—" : formatNumber(record.qtdPacotes)}</td>
+<td class="num">${record.qtdPacotes === 0 && record.qtdPorPacote === 0 ? "—" : formatNumber(record.qtdPorPacote)}</td>
 <td class="num">${formatNumber(record.qtdTotalContada)}</td>
+<td class="num">${formatVolumeM3(record.medida, record.qtdTotalContada)}</td>
 <td class="actions-col">
     <div class="row-actions">
         <button type="button" class="btn-icon edit edit-box-record" data-id="${escapeHTML(record.id)}">Editar</button>
@@ -761,13 +787,18 @@ fornecedor: record.cliente,
 tipoItem: getConferenceTypeLabel(record),
 medida: record.medida,
 registros: 0,
-totalContado: 0
+totalContado: 0,
+totalM3: 0,
+volumeCalculavel: true
 });
 }
 
 const group = totals.get(key);
 group.registros += 1;
 group.totalContado += Number(record.qtdTotalContada || 0);
+const volume = calculateVolumeM3(record.medida, record.qtdTotalContada);
+if (volume === null) group.volumeCalculavel = false;
+else group.totalM3 += volume;
 });
 
 return [...totals.values()].sort((a, b) =>
@@ -792,9 +823,10 @@ tr.innerHTML = `
 <td><strong>${escapeHTML(r.cliente)}</strong></td>
 <td>${escapeHTML(getConferenceTypeLabel(r))}</td>
 <td>${escapeHTML(r.medida)}</td>
-<td class="num">${r.boxNumber ? "—" : formatNumber(r.qtdPacotes)}</td>
-<td class="num">${r.boxNumber ? "—" : formatNumber(r.qtdPorPacote)}</td>
+<td class="num">${r.boxNumber && r.qtdPacotes === 0 && r.qtdPorPacote === 0 ? "—" : formatNumber(r.qtdPacotes)}</td>
+<td class="num">${r.boxNumber && r.qtdPacotes === 0 && r.qtdPorPacote === 0 ? "—" : formatNumber(r.qtdPorPacote)}</td>
 <td class="num"><strong>${formatNumber(r.qtdTotalContada)}</strong></td>
+<td class="num">${formatVolumeM3(r.medida, r.qtdTotalContada)}</td>
 <td class="actions-col">
     <div class="row-actions">
         <button type="button" class="btn-icon edit" data-id="${escapeHTML(r.id)}">Editar</button>
@@ -821,6 +853,7 @@ summaryBody.innerHTML = materialTotals.map((group) => `
 <td>${escapeHTML(group.medida)}</td>
 <td class="num">${formatNumber(group.registros)}</td>
 <td class="num"><strong>${formatNumber(group.totalContado)}</strong></td>
+<td class="num">${group.volumeCalculavel ? formatVolumeValue(group.totalM3) : "—"}</td>
 </tr>
 `).join("");
 document.getElementById("empty-summary").classList.toggle("hidden", materialTotals.length > 0);
@@ -849,7 +882,6 @@ const r = state.registros.find((item) => item.id === id);
 if (!r) return;
 
 const isBoxEntry = Number.isInteger(r.boxNumber);
-legacyConferenceEdit = !isBoxEntry;
 const selectedType = isBoxEntry
 ? `${BOX_NUMBER_VALUE_PREFIX}${r.boxNumber}`
 : r.modeloBoxId
@@ -859,15 +891,15 @@ renderConferenceTypeSelect(selectedType);
 document.getElementById("edit-id").value = r.id;
 document.getElementById("select-cliente").value = r.cliente;
 document.getElementById("select-tipo").value = selectedType;
-updateConferenceQuantityFields();
 document.getElementById("select-medida").value = r.medida;
-inputBoxQuantity.value = isBoxEntry ? r.qtdTotalContada : "";
 inputPacotes.value = r.qtdPacotes;
 inputUnidPacote.value = r.qtdPorPacote;
 inputTotal.value = r.qtdTotalContada;
+updateVolumePreview();
 document.getElementById("input-data").value = r.dataConferencia;
 
 manualTotalOverride = r.qtdTotalContada !== r.qtdPacotes * r.qtdPorPacote;
+legacyBoxQuantityWithoutPackages = isBoxEntry && r.qtdPacotes === 0 && r.qtdPorPacote === 0;
 totalModeTag.textContent = manualTotalOverride ? "Manual" : "Auto";
 totalModeTag.className = manualTotalOverride ? "tag-manual" : "tag-auto";
 
@@ -1104,7 +1136,8 @@ const header = [
 "Medida",
 "Qtd. de Pacotes",
 "Unidades por Pacote",
-"Quantidade Total Contada"
+"Quantidade Total de Unidades",
+"Volume Total (m³)"
 ];
 
 const csvLines = [header.join(";")];
@@ -1114,9 +1147,10 @@ formatDateBR(r.dataConferencia),
 `"${String(r.cliente).replace(/"/g, '""')}"`,
 `"${String(getConferenceTypeLabel(r)).replace(/"/g, '""')}"`,
 `"${String(r.medida).replace(/"/g, '""')}"`,
-r.boxNumber ? "" : r.qtdPacotes,
-r.boxNumber ? "" : r.qtdPorPacote,
-r.qtdTotalContada
+r.qtdPacotes,
+r.qtdPorPacote,
+r.qtdTotalContada,
+formatVolumeM3(r.medida, r.qtdTotalContada)
 ].join(";"));
 });
 

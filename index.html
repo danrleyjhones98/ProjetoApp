@@ -12,7 +12,7 @@
     <title>Conferência de Madeiras & Estoque</title>
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="./manifest.json" />
-    <link rel="stylesheet" href="./style.css?v=5" />
+    <link rel="stylesheet" href="./style.css?v=6" />
 </head>
 
 <body>
@@ -90,36 +90,36 @@
                         </div>
                     </div>
 
-                    <div class="form-group" id="box-quantity-field">
-                        <label for="input-qtd-box">Quantidade *</label>
-                        <input type="number" id="input-qtd-box" inputmode="numeric" min="1" step="1"
-                            placeholder="Ex: 10" required />
-                    </div>
-
-                    <div id="conference-legacy-fields" class="hidden">
-                        <div class="grid-2">
-                            <div class="form-group">
-                                <label for="input-pacotes">Qtd. de Pacotes *</label>
-                                <input type="number" id="input-pacotes" inputmode="numeric" min="0" step="1"
-                                    placeholder="Ex: 12" />
-                            </div>
-
-                            <div class="form-group">
-                                <label for="input-unid-pacote">Unid. por Pacote *</label>
-                                <input type="number" id="input-unid-pacote" inputmode="numeric" min="0" step="1"
-                                    placeholder="Ex: 50" />
-                            </div>
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label for="input-pacotes">Qtd. de Pacotes *</label>
+                            <input type="number" id="input-pacotes" inputmode="numeric" min="0" step="1"
+                                placeholder="Ex: 12" required />
                         </div>
 
                         <div class="form-group">
-                            <div class="label-row">
-                                <label for="input-total">Qtd. Total Contada *</label>
-                                <span id="total-mode-tag" class="tag-auto">Auto</span>
-                            </div>
-                            <input type="number" id="input-total" inputmode="numeric" min="0" step="1" placeholder="0" />
-                            <small class="hint">Calculado automaticamente (Pacotes × Unid.), mas você pode alterar
-                                manualmente se houver peças avulsas.</small>
+                            <label for="input-unid-pacote">Unid. por Pacote *</label>
+                            <input type="number" id="input-unid-pacote" inputmode="numeric" min="0" step="1"
+                                placeholder="Ex: 50" required />
                         </div>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="label-row">
+                            <label for="input-total">Qtd. Total de Unidades *</label>
+                            <span id="total-mode-tag" class="tag-auto">Auto</span>
+                        </div>
+                        <input type="number" id="input-total" inputmode="numeric" min="0" step="1" placeholder="0"
+                            required />
+                        <small class="hint">Calculado automaticamente (pacotes × unidades por pacote); você pode
+                            ajustar se houver peças avulsas.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="input-volume-m3">Volume total (m³)</label>
+                        <input type="text" id="input-volume-m3" value="—" readonly />
+                        <small class="hint">Calculado com as três dimensões em centímetros multiplicadas pelo total
+                            de peças. Medidas com apenas duas dimensões não permitem calcular o volume.</small>
                     </div>
 
                     <div class="form-group">
@@ -145,7 +145,10 @@
                                 <th>Data</th>
                                 <th>Fornecedor / Cliente</th>
                                 <th>Medida</th>
-                                <th class="num">Quantidade</th>
+                                <th class="num">Pacotes</th>
+                                <th class="num">Unid./Pacote</th>
+                                <th class="num">Total Unidades</th>
+                                <th class="num">Total (m³)</th>
                                 <th class="actions-col">Ações</th>
                             </tr>
                         </thead>
@@ -382,7 +385,8 @@
                                     <th>Box / Tipo de Item</th>
                                     <th>Medida</th>
                                     <th class="num">Registros</th>
-                                    <th class="num">Total Contado</th>
+                                    <th class="num">Total de Unidades</th>
+                                    <th class="num">Total (m³)</th>
                                 </tr>
                             </thead>
                             <tbody id="tbody-resumo-materiais"></tbody>
@@ -402,7 +406,8 @@
                                 <th>Medida</th>
                                 <th class="num">Pacotes</th>
                                 <th class="num">Unid./Pct</th>
-                                <th class="num">Total Contado</th>
+                                <th class="num">Total de Unidades</th>
+                                <th class="num">Total (m³)</th>
                                 <th class="actions-col">Ações</th>
                             </tr>
                         </thead>
@@ -412,7 +417,7 @@
                     </table>
                 </div>
                 <div id="empty-state" class="empty-state hidden">
-                    Nenhum lançamento encontrado. Vá em <strong>+ Conferência</strong> para adicionar o primeiro
+                    Nenhum lançamento encontrado. Vá à aba <strong>Boxes</strong> para adicionar o primeiro
                     registro.
                 </div>
             </div>
@@ -496,7 +501,7 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="./app.js?v=5"></script>
+    <script src="./app.js?v=6"></script>
 </body>
 
 </html>
