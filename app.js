@@ -5,7 +5,7 @@ const BOX_MODEL_VALUE_PREFIX = "box-model:";
 const BOX_ENTRY_VALUE_PREFIX = "box-entry:";
 const LEGACY_TYPE_VALUE_PREFIX = "legacy-type:";
 const BOX_NUMBERS = Array.from({ length: 36 }, (_, index) => index + 1);
-const IMPORTED_CSV_DATA_VERSION = 1;
+const IMPORTED_CSV_DATA_VERSION = 2;
 const IMPORTED_CSV_DATA = {
 client: "Cliente Padrão",
 itemType: "Régua",
