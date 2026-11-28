@@ -4,26 +4,30 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#1e3a2f" />
+    <meta name="theme-color" content="#fb923c" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Conferência" />
-    <meta name="description" content="Controle prático de conferência de madeiras, pacotes, unidades e clientes." />
-    <title>Conferência de Madeiras & Estoque</title>
+    <meta name="apple-mobile-web-app-title" content="Paleteria Alagoana" />
+    <meta name="description" content="Gestão de paletes, conferências, estoque e valores da Paleteria Alagoana." />
+    <title>Paleteria Alagoana</title>
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="./manifest.json" />
-    <link rel="stylesheet" href="./style.css?v=19" />
+    <link rel="stylesheet" href="./style.css?v=23" />
 </head>
 
 <body>
     <header class="app-header">
         <div class="header-content">
-            <div>
-                <h1>Conferência de Madeiras</h1>
-                <p class="subtitle">Conferências, estoque e valores em um só lugar</p>
+            <div class="brand">
+                <img class="brand-logo" src="./icon.svg" alt="" />
+                <div>
+                    <h1>Paleteria Alagoana</h1>
+                    <p class="subtitle">Paletes, conferências, estoque e valores</p>
+                </div>
             </div>
-            <span id="status-badge" class="badge-offline" title="Dados salvos localmente no aparelho">Salvo no
-                aparelho</span>
+            <span id="status-badge" class="badge-offline"
+                title="Os dados ficam salvos neste navegador. A sincronização com outros aparelhos é opcional.">Salvo
+                localmente</span>
         </div>
 
         <nav class="tab-bar" role="tablist" aria-label="Navegação principal">
@@ -43,7 +47,7 @@
                 Tabela (<span id="badge-count">0</span>)
             </button>
             <button type="button" class="tab-btn" data-tab="tab-padroes" role="tab" aria-selected="false">
-                Padrões
+                Cadastros
             </button>
         </nav>
     </header>
@@ -167,6 +171,11 @@
                         <input type="date" id="input-data" required />
                     </div>
 
+                    <div class="form-group">
+                        <label for="input-conferente">Nome do conferente *</label>
+                        <input type="text" id="input-conferente" maxlength="100" autocomplete="name" required />
+                    </div>
+
                     <div class="form-actions">
                         <button type="submit" id="btn-submit" class="btn btn-primary btn-block">
                             Salvar Box
@@ -186,6 +195,7 @@
                                 <th>Data de chegada</th>
                                 <th>Tempo desde a chegada</th>
                                 <th>Data da conferência diária</th>
+                                <th>Conferente</th>
                                 <th>Cliente</th>
                                 <th>Medida</th>
                                 <th class="num">Quantidade de Pacotes</th>
@@ -210,7 +220,7 @@
                 <p class="section-desc">As conferências não alteram o saldo. O estoque é separado por item e unidade, e os lançamentos dos Boxes ficam registrados na aba Boxes.</p>
             </div>
 
-            <div class="kpi-grid">
+            <div class="kpi-grid stock-kpi-grid">
                 <div class="kpi-card">
                     <span class="kpi-label">Entradas registradas</span>
                     <strong id="dash-entradas" class="kpi-value">0</strong>
@@ -224,12 +234,17 @@
                 <div class="kpi-card highlight">
                     <span class="kpi-label">Itens com saldo</span>
                     <strong id="dash-itens" class="kpi-value">0</strong>
-                    <span class="kpi-caption">tipos de item</span>
+                    <span class="kpi-caption">mercadorias disponíveis</span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">Itens sem saldo</span>
+                    <strong id="dash-itens-sem-saldo" class="kpi-value">0</strong>
+                    <span class="kpi-caption">sem quantidade disponível</span>
                 </div>
             </div>
 
             <div class="card">
-                <h3>Estoque por item</h3>
+                <h3>Estoque atual por mercadoria</h3>
                 <div class="table-wrapper">
                     <table class="excel-table">
                         <thead>
@@ -245,7 +260,7 @@
                         <tbody id="tbody-saldo-estoque"></tbody>
                     </table>
                 </div>
-                <div id="empty-stock" class="empty-state hidden">Cadastre itens em Padrões e registre uma entrada para iniciar o estoque.</div>
+                <div id="empty-stock" class="empty-state hidden">Cadastre mercadorias em Cadastros e registre uma entrada para iniciar o estoque.</div>
             </div>
         </section>
 
@@ -266,7 +281,7 @@
                         <div class="form-group">
                             <label for="mov-item">Item *</label>
                             <select id="mov-item" required></select>
-                            <small id="mov-unit-hint" class="hint">Cadastre itens em Padrões antes de movimentar o estoque.</small>
+                            <small id="mov-unit-hint" class="hint">Cadastre mercadorias em Cadastros antes de movimentar o estoque.</small>
                         </div>
                     </div>
                     <div class="grid-2">
@@ -447,6 +462,7 @@
                         <thead>
                             <tr>
                                 <th>Data</th>
+                                <th>Conferente</th>
                                 <th>Cliente</th>
                                 <th>Box</th>
                                 <th>Tipo de Item</th>
@@ -472,10 +488,11 @@
             </div>
         </section>
 
-        <!-- ABA 3: CADASTROS PADRÃO -->
+        <!-- ABA 3: CADASTROS -->
         <section id="tab-padroes" class="tab-panel">
+            <h2 class="section-title">Cadastros</h2>
             <p class="section-desc">
-                Cadastre clientes, padrões da conferência e os itens usados no controle de estoque.
+                Gerencie clientes, mercadorias, medidas e os itens usados no controle de estoque.
             </p>
 
             <div class="card">
@@ -543,7 +560,7 @@
 
                 <!-- Tipos de Item -->
                 <div class="card">
-                    <h3>Tipos de Item (Madeiras)</h3>
+                    <h3>Mercadorias</h3>
                     <form class="add-standard-form" data-list="tipos">
                         <input type="text" placeholder="Ex: Régua, Barrote, Linha, Palete..." required />
                         <button type="submit" class="btn btn-primary btn-sm">Adicionar</button>
@@ -552,7 +569,7 @@
                 </div>
 
                 <div class="card">
-                    <h3>Medida por Fornecedor e Tipo de Item</h3>
+                    <h3>Medidas por fornecedor e mercadoria</h3>
                     <p class="hint">Configure a medida automática para uma combinação específica. Ela não será aplicada a outros fornecedores ou tipos.</p>
                     <form id="form-client-type-measure">
                         <div class="grid-2">
@@ -637,7 +654,7 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="./app.js?v=19"></script>
+    <script src="./app.js?v=23"></script>
 </body>
 
 </html>

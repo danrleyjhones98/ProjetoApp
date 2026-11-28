@@ -26,7 +26,7 @@ O token do GitHub e a chave de acesso ficam como secrets no Cloudflare Worker; n
    ```
 
    Nos dois comandos `secret put`, cole o valor correspondente quando solicitado. O comando de deploy informa uma URL `https://...workers.dev`.
-5. Em cada aparelho, abra **Padrões → Sincronização segura entre aparelhos**, informe a URL do Worker e a chave aleatória, salve e toque em **Sincronizar agora**.
+5. Em cada aparelho, abra **Cadastros → Sincronização segura entre aparelhos**, informe a URL do Worker e a chave aleatória, salve e toque em **Sincronizar agora**.
 
 Não envie tokens, chaves ou dados de clientes por mensagens. Se a chave de acesso for exposta, substitua o secret `APP_ACCESS_KEY` no Cloudflare e atualize a configuração nos aparelhos.
 

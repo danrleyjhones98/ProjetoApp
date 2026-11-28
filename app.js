@@ -233,6 +233,7 @@ record.modeloBoxId === undefined &&
 (record.boxId === undefined || record.boxId === `number-${record.boxNumber}`)
 )) &&
 typeof record.dataConferencia === "string" &&
+(record.conferente === undefined || typeof record.conferente === "string") &&
 Number.isFinite(Number(record.qtdPacotes)) &&
 Number.isFinite(Number(record.qtdPorPacote)) &&
 Number.isFinite(Number(record.qtdTotalContada)) &&
@@ -1125,7 +1126,7 @@ document.getElementById("mov-unit-hint").textContent = item
 ? (item.unidade ? `Quantidade em ${item.unidade}.` : "A unidade de contagem deste item não foi informada.")
 : state.itensEstoque.length
 ? "Selecione o item para ver sua unidade de contagem."
-: "Cadastre itens em Padrões antes de movimentar o estoque.";
+: "Cadastre mercadorias em Cadastros antes de movimentar o estoque.";
 }
 
 function fillSelect(selectEl, items, placeholder, selectedValue) {
@@ -1411,7 +1412,7 @@ state[key].splice(index, 1);
 saveState();
 renderSelects();
 renderStandardLists();
-showToast("Item padrão removido.");
+showToast("Item removido dos cadastros.");
 });
 
 li.appendChild(span);
@@ -1515,7 +1516,7 @@ state.medidasPorTipo[val] = [];
 saveState();
 renderSelects();
 renderStandardLists();
-showToast(`"${val}" adicionado aos padrões!`);
+showToast(`"${val}" adicionado aos cadastros!`);
 } else {
 showToast("Este item já está cadastrado.");
 }
@@ -1698,6 +1699,7 @@ qtdColunasPorPacote: packageColumns
 qtdTotalContada: totalQuantity || 0,
 dataRecebimento: receiptDate,
 dataConferencia: document.getElementById("input-data").value,
+conferente: document.getElementById("input-conferente").value.trim(),
 ...(selectedBox ? {
 boxId: selectedBox.id,
 ...(Number.isInteger(selectedBox.number) ? { boxNumber: selectedBox.number } : {})
@@ -1744,6 +1746,7 @@ legacyBoxQuantityWithoutPackages = false;
 totalModeTag.textContent = "Auto";
 totalModeTag.className = "tag-auto";
 document.getElementById("input-data").value = getTodayISO();
+document.getElementById("input-conferente").value = "";
 inputReceiptDate.value = "";
 receiptDatePicker.value = "";
 receiptDatePicker.max = getTodayISO();
@@ -1762,6 +1765,7 @@ tbody.innerHTML = records.map((record) => `
 <td>${record.dataRecebimento ? formatDateBR(record.dataRecebimento) : "Não informado"}</td>
 <td>${formatStorageDuration(record.dataRecebimento)}</td>
 <td>${formatDateBR(record.dataConferencia)}</td>
+<td>${escapeHTML(record.conferente || "—")}</td>
 <td>${escapeHTML(record.cliente)}</td>
 <td>${escapeHTML(record.medida)}</td>
 <td class="num">${record.qtdPacotes === 0 && record.qtdPorPacote === 0 ? "—" : formatNumber(record.qtdPacotes)}</td>
@@ -1855,6 +1859,7 @@ filtered.forEach((r) => {
 const tr = document.createElement("tr");
 tr.innerHTML = `
 <td>${formatDateBR(r.dataConferencia)}</td>
+<td>${escapeHTML(r.conferente || "—")}</td>
 <td><strong>${escapeHTML(r.cliente)}</strong></td>
 <td>${escapeHTML(getRecordBoxName(r) || "—")}</td>
 <td>${escapeHTML(getItemTypeLabel(r))}</td>
@@ -1942,6 +1947,7 @@ inputUnidPacote.readOnly = Boolean(r.qtdLinhasPorPacote && r.qtdColunasPorPacote
 inputTotal.value = r.qtdTotalContada;
 updateVolumePreview();
 document.getElementById("input-data").value = r.dataConferencia;
+document.getElementById("input-conferente").value = r.conferente || "";
 inputReceiptDate.value = r.dataRecebimento ? formatDateBR(r.dataRecebimento) : "";
 receiptDatePicker.value = r.dataRecebimento || "";
 
@@ -1981,6 +1987,9 @@ state.movimentacoes.filter((movement) => movement.operacao === "saida").length
 );
 document.getElementById("dash-itens").textContent = formatNumber(
 summary.filter((row) => row.entradas - row.saidas > 0).length
+);
+document.getElementById("dash-itens-sem-saldo").textContent = formatNumber(
+summary.filter((row) => row.entradas - row.saidas <= 0).length
 );
 
 const tbody = document.getElementById("tbody-saldo-estoque");
@@ -2180,6 +2189,7 @@ const header = [
 "Data de chegada da madeira",
 "Tempo desde a chegada",
 "Data da conferência diária",
+"Conferente",
 "Cliente",
 "Box",
 "Tipo de Item",
@@ -2198,6 +2208,7 @@ csvLines.push([
 formatDateBR(r.dataRecebimento),
 formatStorageDuration(r.dataRecebimento),
 formatDateBR(r.dataConferencia),
+`"${String(r.conferente || "").replace(/"/g, '""')}"`,
 `"${String(r.cliente).replace(/"/g, '""')}"`,
 `"${String(getRecordBoxName(r) || "—").replace(/"/g, '""')}"`,
 `"${String(getItemTypeLabel(r)).replace(/"/g, '""')}"`,

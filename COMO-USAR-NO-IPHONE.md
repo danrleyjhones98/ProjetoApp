@@ -11,6 +11,6 @@ O projeto é um aplicativo web (PWA), não um arquivo de aplicativo iOS (`.ipa`)
 5. No iPhone, abra esse endereço no **Safari**. Toque em **Compartilhar > Adicionar à Tela de Início** e confirme.
 6. Abra o ícone criado na tela inicial. Depois da primeira abertura com internet, o aplicativo também poderá carregar offline.
 
-Não renomeie nem separe os arquivos: eles precisam continuar juntos na mesma pasta. Os dados ficam salvos no navegador/aparelho em que foram cadastrados. Para sincronizar aparelhos, é necessário publicar o serviço privado descrito em [sync-worker/README.md](./sync-worker/README.md) e configurar o endereço e a chave em **Padrões > Sincronização segura entre aparelhos**. Até essa configuração ser concluída, os dados permanecem somente no aparelho. Para uma transferência manual, use **Backup JSON** no computador e **Restaurar** no iPhone.
+Não renomeie nem separe os arquivos: eles precisam continuar juntos na mesma pasta. Os dados ficam salvos no navegador/aparelho em que foram cadastrados. Para sincronizar aparelhos, é necessário publicar o serviço privado descrito em [sync-worker/README.md](./sync-worker/README.md) e configurar o endereço e a chave em **Cadastros > Sincronização segura entre aparelhos**. Até essa configuração ser concluída, os dados permanecem somente no aparelho. Para uma transferência manual, use **Backup JSON** no computador e **Restaurar** no iPhone.
 
 No cadastro de **Itens do estoque**, nome, categoria, unidade e medida são opcionais; informe somente os detalhes disponíveis.

@@ -1,12 +1,12 @@
 {
-"name": "Conferência de Madeiras",
-"short_name": "Conferência",
-"description": "Controle de estoque de madeiras, movimentações e valores.",
+"name": "Paleteria Alagoana",
+"short_name": "Paleteria",
+"description": "Gestão de paletes, conferências, estoque e valores.",
 "start_url": "./",
 "scope": "./",
 "display": "standalone",
 "background_color": "#f3f4f6",
-"theme_color": "#1e3a2f",
+"theme_color": "#fb923c",
 "orientation": "portrait",
 "icons": [
 {

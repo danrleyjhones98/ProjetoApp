@@ -1,9 +1,11 @@
 :root {
 --bg: #f3f4f6;
 --surface: #ffffff;
---primary: #1e3a2f;
---primary-hover: #152921;
---accent: #2e6f40;
+--primary: #fb923c;
+--primary-hover: #f97316;
+--accent: #c2410c;
+--accent-hover: #9a3412;
+--brand-ink: #431407;
 --excel: #1d6f42;
 --text: #1f2937;
 --text-muted: #6b7280;
@@ -31,7 +33,7 @@ padding-bottom: calc(32px + env(safe-area-inset-bottom, 0px));
 
 .app-header {
 background-color: var(--primary);
-color: #ffffff;
+color: var(--brand-ink);
 padding: calc(16px + env(safe-area-inset-top, 0px)) 16px 0;
 position: sticky;
 top: 0;
@@ -48,22 +50,36 @@ align-items: center;
 gap: 12px;
 }
 
+.brand {
+display: flex;
+align-items: center;
+gap: 10px;
+min-width: 0;
+}
+
+.brand-logo {
+width: 46px;
+height: 46px;
+flex: 0 0 46px;
+border-radius: 11px;
+}
+
 .app-header h1 {
-font-size: 1.25rem;
-font-weight: 700;
+font-size: clamp(1rem, 3.5vw, 1.25rem);
+font-weight: 800;
 }
 
 .subtitle {
 font-size: 0.8rem;
-color: #cbd5e1;
+color: var(--brand-ink);
 }
 
 .badge-offline,
 .badge-online,
 .badge-syncing,
 .badge-error {
-background: rgba(255, 255, 255, 0.14);
-color: #e2e8f0;
+background: rgba(255, 255, 255, 0.55);
+color: var(--brand-ink);
 font-size: 0.72rem;
 padding: 4px 10px;
 border-radius: 999px;
@@ -102,8 +118,8 @@ display: none;
 
 .tab-btn {
 flex: 1 0 auto;
-background: rgba(255, 255, 255, 0.1);
-color: #e5e7eb;
+background: rgba(124, 45, 18, 0.08);
+color: var(--brand-ink);
 border: none;
 padding: 12px 8px;
 font-size: 0.92rem;
@@ -116,7 +132,11 @@ transition: background 0.15s, color 0.15s;
 
 .tab-btn.active {
 background: var(--bg);
-color: var(--primary);
+color: var(--brand-ink);
+}
+
+.tab-btn:hover:not(.active) {
+background: var(--primary-hover);
 }
 
 .container {
@@ -151,13 +171,18 @@ margin-bottom: 14px;
 
 .card h2 {
 font-size: 1.1rem;
-color: var(--primary);
+color: var(--brand-ink);
 }
 
 .card h3 {
 font-size: 1rem;
-color: var(--primary);
+color: var(--brand-ink);
 margin-bottom: 10px;
+}
+
+.section-title {
+color: var(--brand-ink);
+margin-bottom: 6px;
 }
 
 .form-group {
@@ -220,14 +245,14 @@ color: var(--text);
 input:focus, select:focus {
 outline: none;
 border-color: var(--accent);
-box-shadow: 0 0 0 3px rgba(46, 111, 64, 0.15);
+box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.16);
 }
 
 .sync-status {
 margin: 12px 0 8px;
 font-size: 0.9rem;
 font-weight: 600;
-color: var(--primary);
+color: var(--brand-ink);
 }
 
 .sync-actions {
@@ -239,7 +264,7 @@ margin-bottom: 10px;
 
 button:focus-visible,
 .file-label:focus-visible {
-outline: 3px solid #f59e0b;
+outline: 3px solid #fb923c;
 outline-offset: 2px;
 }
 
@@ -265,7 +290,7 @@ min-height: 46px;
 border-radius: 8px;
 border: 1px solid var(--border);
 background: #f9fafb;
-color: var(--primary);
+color: var(--brand-ink);
 font-size: 1.35rem;
 font-weight: 700;
 cursor: pointer;
@@ -327,7 +352,7 @@ color: #fff;
 }
 
 .btn-primary:hover {
-background-color: var(--primary);
+background-color: var(--accent-hover);
 }
 
 .btn-excel {
@@ -354,6 +379,10 @@ gap: 10px;
 margin-bottom: 14px;
 }
 
+.stock-kpi-grid {
+grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+}
+
 .kpi-card {
 background: var(--surface);
 border-radius: var(--radius);
@@ -365,7 +394,7 @@ text-align: center;
 
 .kpi-card.highlight {
 border-color: var(--accent);
-background: #f0fdf4;
+background: #fff7ed;
 }
 
 .kpi-label {
@@ -377,7 +406,7 @@ margin-bottom: 2px;
 
 .kpi-value {
 font-size: 1.25rem;
-color: var(--primary);
+color: var(--brand-ink);
 }
 
 .kpi-caption {
@@ -454,8 +483,8 @@ white-space: nowrap;
 }
 
 .excel-table th {
-background-color: #1e3a2f;
-color: #ffffff;
+background-color: var(--primary);
+color: var(--brand-ink);
 font-weight: 600;
 text-align: left;
 padding: 10px 12px;
@@ -473,7 +502,7 @@ background-color: #f9fafb;
 }
 
 .excel-table tbody tr:hover {
-background-color: #ecfdf5;
+background-color: #fff7ed;
 }
 
 .excel-table th.num,
